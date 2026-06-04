@@ -52,7 +52,7 @@ export default function Home() {
   const [tarjeta, setTarjeta]       = useState<TarjetaResultado | null>(null)
   const [cargando, setCargando]     = useState(false)
   const [mostrarDrop, setMostrarDrop] = useState(false)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef    = useRef<HTMLInputElement>(null)
   const dropRef     = useRef<HTMLDivElement>(null)
 
