@@ -282,7 +282,10 @@ export default function MapaFarmacias({ nombreMedicamento }: { nombreMedicamento
       {/* Lista de farmacias */}
       {farmaciasMapa.length > 0 && (
         <div className="mt-3 max-h-48 overflow-y-auto">
-          {[...cenabastList, ...turnoList, ...regularList].slice(0, 10).map(f => (
+          {(filtro === 'turno'
+          ? turnosFull.slice(0, 10)
+          : [...cenabastList, ...turnoList, ...regularList].slice(0, 10)
+        ).map(f => (
             <div key={f.local_id} className="flex items-center gap-3 py-2.5 border-t border-gray-100">
               <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
                 f.es_cenabast ? 'bg-[#1D9E75]' : f.es_turno ? 'bg-[#EF9F27]' : 'bg-gray-400'
