@@ -70,7 +70,7 @@ export default function Home() {
   // Autocompletado con debounce
   useEffect(() => {
     if (query.length < 2) { setSugerencias([]); setMostrarDrop(false); return }
-    clearTimeout(debounceRef.current)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/buscar?q=${encodeURIComponent(query)}`)
