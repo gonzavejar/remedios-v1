@@ -1,12 +1,12 @@
 'use client'
 // app/registrar/page.tsx
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { obtenerUsuario, obtenerCredenciales, registrarPrecio } from '../../lib/auth'
 import { supabase } from '../../lib/supabase'
 
-export default function RegistrarPage() {
+function RegistrarContent() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const productoId   = parseInt(searchParams.get('producto') ?? '0')
@@ -222,5 +222,20 @@ export default function RegistrarPage() {
         </form>
       </div>
     </main>
+  )
+}
+
+export default function RegistrarPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#EFF4F0' }}>
+        <div style={{ textAlign:'center' }}>
+          <div style={{ width:32, height:32, border:'2px solid #0B5966', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 1s linear infinite', margin:'0 auto 12px' }}/>
+          <p style={{ color:'#6b7280', fontSize:14 }}>Cargando...</p>
+        </div>
+      </div>
+    }>
+      <RegistrarContent />
+    </Suspense>
   )
 }
