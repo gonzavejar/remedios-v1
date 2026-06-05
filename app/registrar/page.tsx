@@ -423,7 +423,7 @@ function RegistrarContent() {
             {error && <p className="text-sm text-red-600 text-center">{error}</p>}
 
             <button onClick={handleGuardar}
-              disabled={datos.productos.filter(p => p.incluir && p.precio_unitario > 0).length === 0 || paso === 'enviando'}
+              disabled={datos.productos.filter(p => p.incluir && p.precio_unitario > 0).length === 0}
               className="w-full py-4 rounded-xl text-white font-medium text-sm disabled:opacity-40"
               style={{ background: '#0B5966' }}>
               Guardar {datos.productos.filter(p => p.incluir && p.precio_unitario > 0).length} remedio(s)
