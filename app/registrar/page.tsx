@@ -203,7 +203,7 @@ function RegistrarContent() {
   // ── Paso 4: guardar ───────────────────────────────────────────────────────
 
   async function handleGuardar() {
-    if (!usuario || !foto || !datos) return
+    if (!usuario || !datos) return
     const incluidos = datos.productos.filter(p => p.incluir && p.precio_unitario > 0)
     if (incluidos.length === 0) { setError('Selecciona al menos un remedio con precio.'); return }
 
@@ -211,9 +211,8 @@ function RegistrarContent() {
     setError(null)
 
     try {
-      // Subir foto una sola vez
-      const fotoUrl = await subirFotoBoleta(usuario.id, foto)
-      if (!fotoUrl) throw new Error('No se pudo subir la foto')
+      // Subir foto si existe
+      const fotoUrl = foto ? await subirFotoBoleta(usuario.id, foto) : null
 
       // Insertar un registro por cada producto incluido
       const inserts = incluidos.map(p => ({
@@ -223,7 +222,7 @@ function RegistrarContent() {
         fecha_compra:    datos.fecha ?? new Date().toISOString().split('T')[0],
         farmacia_nombre: datos.farmacia,
         farmacia_comuna: datos.comuna ?? '',
-        foto_boleta_url: fotoUrl,
+        foto_boleta_url: fotoUrl ?? null,
         canal:           'lista',
         tipo_descuento:  p.tipo_descuento,
         credencial_usada: p.credencial_usada || null,
@@ -424,7 +423,7 @@ function RegistrarContent() {
             {error && <p className="text-sm text-red-600 text-center">{error}</p>}
 
             <button onClick={handleGuardar}
-              disabled={datos.productos.filter(p => p.incluir && p.precio_unitario > 0).length === 0}
+              disabled={datos.productos.filter(p => p.incluir && p.precio_unitario > 0).length === 0 || paso === 'enviando'}
               className="w-full py-4 rounded-xl text-white font-medium text-sm disabled:opacity-40"
               style={{ background: '#0B5966' }}>
               Guardar {datos.productos.filter(p => p.incluir && p.precio_unitario > 0).length} remedio(s)

@@ -36,7 +36,7 @@ export async function obtenerUsuario(): Promise<UsuarioActual | null> {
 export async function registrarConEmail(email: string, password: string) {
   return supabase.auth.signUp({
     email, password,
-    options: { emailRedirectTo: `${typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL}/` },
+    options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback` },
   })
 }
 
@@ -47,7 +47,7 @@ export async function iniciarSesionEmail(email: string, password: string) {
 export async function iniciarSesionGoogle() {
   return supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: `${typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL}/` },
+    options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback` },
   })
 }
 
@@ -145,18 +145,22 @@ export async function subirFotoBoleta(usuarioId: string, archivo: File): Promise
 
 export async function registrarPrecio(params: {
   usuarioId: string
-  productoId: number
+  productoId: number | null
   valorClp: number
   fechaCompra: string
   farmaciaNombre: string
   farmaciaComuna: string
-  fotoBoleta: File
+  fotoBoleta?: File | null   // foto opcional
   canal: string
   tipoDescuento: string
   credencialUsada: string
 }) {
-  const fotoUrl = await subirFotoBoleta(params.usuarioId, params.fotoBoleta)
-  if (!fotoUrl) return { error: 'No se pudo subir la foto de boleta' }
+  // Subir foto solo si existe
+  let fotoUrl: string | null = null
+  if (params.fotoBoleta) {
+    fotoUrl = await subirFotoBoleta(params.usuarioId, params.fotoBoleta)
+    if (!fotoUrl) return { error: 'No se pudo subir la foto de boleta' }
+  }
 
   const { error } = await supabase.from('precio_usuario').insert({
     usuario_id:      params.usuarioId,
