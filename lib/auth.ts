@@ -23,8 +23,7 @@ export interface Credenciales {
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export async function obtenerUsuario(): Promise<UsuarioActual | null> {
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
   return {
     id: user.id,
@@ -37,7 +36,7 @@ export async function obtenerUsuario(): Promise<UsuarioActual | null> {
 export async function registrarConEmail(email: string, password: string) {
   return supabase.auth.signUp({
     email, password,
-    options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/` },
+    options: { emailRedirectTo: `${typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL}/` },
   })
 }
 
@@ -48,7 +47,7 @@ export async function iniciarSesionEmail(email: string, password: string) {
 export async function iniciarSesionGoogle() {
   return supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/` },
+    options: { redirectTo: `${typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL}/` },
   })
 }
 
