@@ -1,6 +1,6 @@
 'use client'
-// app/perfil/page.tsx
-// Perfil del usuario: mis remedios + credenciales de descuento
+// app/perfil/page.tsx — versión 2
+// Agrega botón "Registrar precio" en la lista de Mis remedios
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -10,13 +10,13 @@ import {
 } from '../../lib/auth'
 
 const ISAPRES = ['Banmédica','Colmena','Consalud','Cruz Blanca','Más Vida','Nueva Masvida','Vida Tres','Otra']
-const CAJAS   = [
-  { value: 'los_andes',       label: 'Los Andes'       },
-  { value: 'los_heroes',      label: 'Los Héroes'       },
-  { value: '18_septiembre',   label: '18 de Septiembre' },
-  { value: 'araucana',        label: 'La Araucana'      },
-  { value: 'serviestado',     label: 'ServiEstado'      },
-  { value: 'otra',            label: 'Otra'             },
+const CAJAS = [
+  { value: 'los_andes',     label: 'Los Andes'        },
+  { value: 'los_heroes',    label: 'Los Héroes'        },
+  { value: '18_septiembre', label: '18 de Septiembre'  },
+  { value: 'araucana',      label: 'La Araucana'       },
+  { value: 'serviestado',   label: 'ServiEstado'       },
+  { value: 'otra',          label: 'Otra'              },
 ]
 
 export default function PerfilPage() {
@@ -78,7 +78,6 @@ export default function PerfilPage() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="max-w-lg mx-auto px-4">
         <div className="flex gap-1 mt-4 mb-4 bg-white rounded-xl p-1 shadow-sm">
           {([
@@ -86,9 +85,7 @@ export default function PerfilPage() {
             { key: 'remedios',     label: `💊 Mis remedios (${remedios.length})` },
           ] as const).map(({ key, label }) => (
             <button key={key} onClick={() => setTab(key)}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                tab === key ? 'text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${tab === key ? 'text-white shadow-sm' : 'text-gray-500'}`}
               style={tab === key ? { background: '#0B5966' } : {}}>
               {label}
             </button>
@@ -98,9 +95,7 @@ export default function PerfilPage() {
         {/* Tab: Credenciales */}
         {tab === 'credenciales' && (
           <div className="space-y-4 pb-8">
-            <p className="text-xs text-gray-500 px-1">
-              Configura tus convenios para que la app te muestre los descuentos que te corresponden.
-            </p>
+            <p className="text-xs text-gray-500 px-1">Configura tus convenios para ver los descuentos que te corresponden.</p>
 
             {/* Previsión */}
             <div className="bg-white rounded-2xl p-4 shadow-sm">
@@ -116,9 +111,7 @@ export default function PerfilPage() {
                   { value: 'ninguna',  label: 'Ninguna'  },
                 ].map(op => (
                   <button key={op.value} onClick={() => setCreds((p: any) => ({ ...p, prevision: op.value }))}
-                    className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-colors text-left ${
-                      creds.prevision === op.value ? 'text-white' : 'bg-gray-100 text-gray-600'
-                    }`}
+                    className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-colors text-left ${creds.prevision === op.value ? 'text-white' : 'bg-gray-100 text-gray-600'}`}
                     style={creds.prevision === op.value ? { background: '#0B5966' } : {}}>
                     {op.label}
                   </button>
@@ -136,15 +129,13 @@ export default function PerfilPage() {
               )}
             </div>
 
-            {/* Caja de Compensación */}
+            {/* Caja */}
             <div className="bg-white rounded-2xl p-4 shadow-sm">
               <h3 className="font-semibold text-gray-800 mb-3">Caja de Compensación</h3>
               <div className="grid grid-cols-2 gap-2">
                 {CAJAS.map(c => (
                   <button key={c.value} onClick={() => setCreds((p: any) => ({ ...p, caja_nombre: p.caja_nombre === c.value ? null : c.value }))}
-                    className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-colors ${
-                      creds.caja_nombre === c.value ? 'text-white' : 'bg-gray-100 text-gray-600'
-                    }`}
+                    className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-colors ${creds.caja_nombre === c.value ? 'text-white' : 'bg-gray-100 text-gray-600'}`}
                     style={creds.caja_nombre === c.value ? { background: '#0B5966' } : {}}>
                     {c.label}
                   </button>
@@ -152,7 +143,7 @@ export default function PerfilPage() {
               </div>
             </div>
 
-            {/* Clubes de farmacia */}
+            {/* Clubes */}
             <div className="bg-white rounded-2xl p-4 shadow-sm">
               <h3 className="font-semibold text-gray-800 mb-1">Clubes de farmacia</h3>
               <p className="text-xs text-gray-400 mb-3">Gratis inscribirse — actívalos si ya tienes la tarjeta</p>
@@ -165,9 +156,7 @@ export default function PerfilPage() {
                 ].map(({ field, label }) => (
                   <label key={field} className="flex items-center gap-3 cursor-pointer">
                     <div onClick={() => toggle(field)}
-                      className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${
-                        creds[field] ? 'bg-[#0B5966]' : 'bg-gray-200'
-                      }`}>
+                      className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${creds[field] ? 'bg-[#0B5966]' : 'bg-gray-200'}`}>
                       <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${creds[field] ? 'translate-x-4' : ''}`}/>
                     </div>
                     <span className="text-sm text-gray-700">{label}</span>
@@ -176,7 +165,7 @@ export default function PerfilPage() {
               </div>
             </div>
 
-            {/* Seguro complementario */}
+            {/* Seguro */}
             <div className="bg-white rounded-2xl p-4 shadow-sm">
               <h3 className="font-semibold text-gray-800 mb-3">Seguro complementario</h3>
               <label className="flex items-center gap-3 cursor-pointer mb-3">
@@ -187,13 +176,12 @@ export default function PerfilPage() {
                 <span className="text-sm text-gray-700">Tengo seguro complementario</span>
               </label>
               {creds.tiene_seguro_comp && (
-                <input type="text" value={creds.seguro_comp_nombre ?? ''} placeholder="Ej: SURA, Consorcio, Bice Vida..."
+                <input type="text" value={creds.seguro_comp_nombre ?? ''} placeholder="Ej: SURA, Consorcio..."
                   onChange={e => setCreds((p: any) => ({ ...p, seguro_comp_nombre: e.target.value }))}
                   className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0B5966]"/>
               )}
             </div>
 
-            {/* Guardar */}
             {guardadoOk && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
                 <p className="text-sm text-emerald-700">✓ Convenios guardados</p>
@@ -210,6 +198,18 @@ export default function PerfilPage() {
         {/* Tab: Mis remedios */}
         {tab === 'remedios' && (
           <div className="pb-8">
+            {/* Botón para registrar desde boleta sin producto específico */}
+            <button onClick={() => router.push('/registrar')}
+              className="w-full py-3 rounded-xl text-white font-medium text-sm mb-4 flex items-center justify-center gap-2"
+              style={{ background: '#0B5966' }}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+              Fotografiar boleta de compra
+            </button>
+
             {remedios.length === 0 ? (
               <div className="text-center py-10">
                 <p className="text-gray-500 text-sm">Aún no tienes remedios guardados.</p>
@@ -220,15 +220,34 @@ export default function PerfilPage() {
             ) : (
               <div className="space-y-2">
                 {remedios.map((r: any) => (
-                  <div key={r.id} className="bg-white rounded-2xl px-4 py-3.5 shadow-sm flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900 text-sm">{(r.producto as any)?.nombre_comercial}</p>
-                      <p className="text-xs text-gray-400">{(r.producto as any)?.dosis_forma}</p>
+                  <div key={r.id} className="bg-white rounded-2xl px-4 py-3.5 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 text-sm truncate">
+                          {(r.producto as any)?.nombre_comercial}
+                        </p>
+                        <p className="text-xs text-gray-400">{(r.producto as any)?.dosis_forma}</p>
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        {/* Registrar precio directo */}
+                        <button
+                          onClick={() => router.push(`/registrar?producto=${r.producto_id}`)}
+                          className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1"
+                          style={{ background: 'rgba(11,89,102,0.08)', color: '#0B5966' }}>
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                          </svg>
+                          Precio
+                        </button>
+                        {/* Consultar */}
+                        <button
+                          onClick={() => router.push(`/?buscar=${encodeURIComponent((r.producto as any)?.nombre_comercial ?? '')}`)}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200">
+                          Consultar
+                        </button>
+                      </div>
                     </div>
-                    <button onClick={() => router.push(`/?buscar=${encodeURIComponent((r.producto as any)?.nombre_comercial ?? '')}`)}
-                      className="text-xs px-3 py-1.5 rounded-lg" style={{ background: 'rgba(11,89,102,0.08)', color: '#0B5966' }}>
-                      Consultar
-                    </button>
                   </div>
                 ))}
               </div>
