@@ -1,26 +1,64 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ============================================================
+   ESTILOS GLOBALES — app/globals.css
+   ============================================================ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* 1. Texto base más grande y legible */
+html {
+  font-size: 17px;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: #1A2E2E;
+  -webkit-font-smoothing: antialiased;
+  background: #EFF4F0;
+}
+
+/* 2. Fix del highlight al tocar en móvil */
+* {
+  -webkit-tap-highlight-color: rgba(11, 89, 102, 0.15);
+  box-sizing: border-box;
+}
+
+/* 3. Selección de texto con buen contraste */
+::selection {
+  background: #0B5966;
+  color: #FFFFFF;
+}
+
+/* 4. Opciones de <select> nativo con contraste legible en móvil */
+select option {
+  color: #1A2E2E;
+  background: #FFFFFF;
+}
+
+/* 5. Inputs, selects y textareas legibles y cómodos al tacto */
+input, select, textarea {
+  color: #1A2E2E;
+  font-size: 16px;     /* evita zoom automático en iOS */
+  min-height: 48px;    /* área táctil cómoda */
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #9CA3AF;
+}
+
+/* 6. Botones con área táctil mínima */
+button {
+  min-height: 44px;
+  cursor: pointer;
+}
+
+/* 7. Animación de spinner */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 8. Eliminar outline por defecto en focus visible
+      (reemplazado por estilos propios en cada componente) */
+:focus-visible {
+  outline: 2px solid #0B5966;
+  outline-offset: 2px;
 }

@@ -178,3 +178,37 @@ export async function registrarPrecio(params: {
   if (error) return { error: error.message }
   return { ok: true }
 }
+
+// ─── Plan de toma / posología ─────────────────────────────────────────────────
+
+/** Agrega un remedio con posología a la lista del usuario */
+export async function agregarRemedioConPosologia(params: {
+  usuarioId: string
+  productoId: number | null
+  nombreManual?: string
+  dosisTexto: string
+  posologia: string
+  momentoToma: string[]
+  permanente: boolean
+}) {
+  return supabase.from('usuario_remedio').upsert({
+    usuario_id:   params.usuarioId,
+    producto_id:  params.productoId,
+    dosis_texto:  params.dosisTexto,
+    posologia:    params.posologia,
+    momento_toma: params.momentoToma,
+    permanente:   params.permanente,
+    activo:       true,
+    notas:        params.productoId ? null : params.nombreManual,
+  }, { onConflict: 'usuario_id,producto_id' })
+}
+
+/** Obtiene el plan de toma del usuario organizado por momento del día */
+export async function obtenerPlanToma(usuarioId: string) {
+  const { data } = await supabase
+    .from('usuario_remedio')
+    .select('id, producto_id, dosis_texto, posologia, momento_toma, notas, producto (nombre_comercial, dosis_forma)')
+    .eq('usuario_id', usuarioId)
+    .eq('activo', true)
+  return data ?? []
+}
