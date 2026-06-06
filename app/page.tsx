@@ -78,12 +78,10 @@ export default function Home() {
   const dropRef     = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    // Manejar código OAuth de Google directamente en la home page
-    const params = new URLSearchParams(window.location.search)
-    const code = params.get('code')
-    if (code) {
+    // Limpiar ?code= de la URL si viene del callback de Google
+    // detectSessionInUrl:true en supabase.ts lo procesa automáticamente
+    if (window.location.search.includes('code=')) {
       window.history.replaceState({}, '', '/')
-      supabase.auth.exchangeCodeForSession(code).catch(console.error)
     }
 
     // Leer sesión inicial
@@ -213,6 +211,27 @@ export default function Home() {
         </p>
         <h1 className="text-3xl font-bold leading-snug">¿Cuánto debería<br/>costar tu remedio?</h1>
         <p className="text-sm mt-2" style={{ color: '#A8D8CE' }}>Beneficios reales · Fuentes oficiales</p>
+
+        {/* Accesos rápidos cuando está autenticado */}
+        {usuario && (
+          <div className="flex gap-2 mt-5">
+            <button onClick={() => router.push('/plan')}
+              className="flex-1 py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+              style={{ background: 'rgba(255,255,255,0.15)', color: '#FFFFFF' }}>
+              💊 Mi plan
+            </button>
+            <button onClick={() => router.push('/receta')}
+              className="flex-1 py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+              style={{ background: 'rgba(255,255,255,0.15)', color: '#FFFFFF' }}>
+              📄 Receta
+            </button>
+            <button onClick={() => router.push('/perfil')}
+              className="flex-1 py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+              style={{ background: 'rgba(255,255,255,0.15)', color: '#FFFFFF' }}>
+              🎫 Convenios
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="max-w-lg mx-auto px-4 pb-16">
