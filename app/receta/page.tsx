@@ -166,18 +166,27 @@ export default function RecetaPage() {
         {/* Paso 1: Foto */}
         {paso === 'foto' && (
           <div>
-            <button onClick={() => fileRef.current?.click()}
-              className="w-full py-14 border-2 border-dashed border-gray-300 rounded-2xl bg-white flex flex-col items-center gap-3 mb-4">
-              <svg className="w-14 h-14 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-              </svg>
-              <div className="text-center px-4">
+            {/* Opción 1: Cámara */}
+            <button onClick={() => { if (fileRef.current) { (fileRef.current as any).capture = 'environment'; fileRef.current.click() } }}
+              className="w-full py-8 border-2 border-dashed border-gray-300 rounded-2xl bg-white flex items-center gap-4 px-6 mb-3">
+              <span className="text-4xl flex-shrink-0">📷</span>
+              <div className="text-left">
                 <p className="text-gray-800 font-semibold text-lg">Fotografiar receta</p>
-                <p className="text-base text-gray-500 mt-1">Leeremos tus remedios y cómo tomarlos</p>
+                <p className="text-base text-gray-500">Usa la cámara del teléfono</p>
               </div>
             </button>
-            <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleFoto} className="hidden"/>
+
+            {/* Opción 2: Archivo o galería */}
+            <button onClick={() => { if (fileRef.current) { (fileRef.current as any).removeAttribute?.('capture'); fileRef.current.click() } }}
+              className="w-full py-8 border-2 border-dashed border-gray-300 rounded-2xl bg-white flex items-center gap-4 px-6 mb-4">
+              <span className="text-4xl flex-shrink-0">📁</span>
+              <div className="text-left">
+                <p className="text-gray-800 font-semibold text-lg">Subir archivo</p>
+                <p className="text-base text-gray-500">Foto de galería o PDF</p>
+              </div>
+            </button>
+
+            <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={handleFoto} className="hidden"/>
 
             {/* Nota de privacidad */}
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">

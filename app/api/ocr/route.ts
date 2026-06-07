@@ -1,12 +1,19 @@
-// app/api/ocr/route.ts
-// Extrae datos de una boleta de farmacia usando Claude Vision.
+// app/api/ocr/route.ts — versión 2
+// Acepta imágenes (jpg, png, webp) Y archivos PDF.
 
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
     const { imagenBase64, mediaType } = await request.json()
-    if (!imagenBase64) return NextResponse.json({ error: 'Falta la imagen' }, { status: 400 })
+    if (!imagenBase64) return NextResponse.json({ error: 'Falta el archivo' }, { status: 400 })
+
+    const esPDF = mediaType === 'application/pdf'
+
+    // Contenido de la imagen o PDF para Claude
+    const contenido = esPDF
+      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: imagenBase64 } }
+      : { type: 'image',    source: { type: 'base64', media_type: mediaType ?? 'image/jpeg', data: imagenBase64 } }
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -17,10 +24,7 @@ export async function POST(request: NextRequest) {
         messages: [{
           role: 'user',
           content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: mediaType ?? 'image/jpeg', data: imagenBase64 }
-            },
+            contenido,
             {
               type: 'text',
               text: `Analiza esta boleta de farmacia chilena.
@@ -60,6 +64,6 @@ Si ves CLUB, CONVENIO o DESCUENTO en la boleta, márcalo en tipo_descuento_detec
     }
   } catch (error) {
     console.error('Error OCR:', error)
-    return NextResponse.json({ ok: false, error: 'Error al procesar la imagen.' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Error al procesar el archivo.' }, { status: 500 })
   }
 }

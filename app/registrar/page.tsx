@@ -203,7 +203,7 @@ function RegistrarContent() {
   // ── Paso 4: guardar ───────────────────────────────────────────────────────
 
   async function handleGuardar() {
-    if (!usuario || !datos) return
+    if (!usuario || !foto || !datos) return
     const incluidos = datos.productos.filter(p => p.incluir && p.precio_unitario > 0)
     if (incluidos.length === 0) { setError('Selecciona al menos un remedio con precio.'); return }
 
@@ -211,8 +211,9 @@ function RegistrarContent() {
     setError(null)
 
     try {
-      // Subir foto si existe
-      const fotoUrl = foto ? await subirFotoBoleta(usuario.id, foto) : null
+      // Subir foto una sola vez
+      const fotoUrl = await subirFotoBoleta(usuario.id, foto)
+      if (!fotoUrl) throw new Error('No se pudo subir la foto')
 
       // Insertar un registro por cada producto incluido
       const inserts = incluidos.map(p => ({
@@ -222,7 +223,7 @@ function RegistrarContent() {
         fecha_compra:    datos.fecha ?? new Date().toISOString().split('T')[0],
         farmacia_nombre: datos.farmacia,
         farmacia_comuna: datos.comuna ?? '',
-        foto_boleta_url: fotoUrl ?? null,
+        foto_boleta_url: fotoUrl,
         canal:           'lista',
         tipo_descuento:  p.tipo_descuento,
         credencial_usada: p.credencial_usada || null,
@@ -283,11 +284,11 @@ function RegistrarContent() {
                 </svg>
                 <div className="text-center">
                   <p className="text-gray-600 font-medium">Fotografiar boleta</p>
-                  <p className="text-xs text-gray-400 mt-1">La app leerá automáticamente los remedios y precios</p>
+                  <p className="text-xs text-gray-400 mt-1">Foto, galería o PDF</p>
                 </div>
               </button>
             )}
-            <input ref={fileRef} type="file" accept="image/*" capture="environment"
+            <input ref={fileRef} type="file" accept="image/*,application/pdf"
               onChange={handleFoto} className="hidden"/>
             {error && <p className="text-sm text-red-600 text-center">{error}</p>}
           </div>
