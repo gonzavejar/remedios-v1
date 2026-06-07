@@ -214,19 +214,24 @@ export default function Home() {
 
         {/* Accesos rápidos cuando está autenticado */}
         {usuario && (
-          <div className="flex gap-2 mt-5">
+          <div className="grid grid-cols-2 gap-2 mt-5">
             <button onClick={() => router.push('/plan')}
-              className="flex-1 py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+              className="py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
               style={{ background: 'rgba(255,255,255,0.15)', color: '#FFFFFF' }}>
               💊 Mi plan
             </button>
             <button onClick={() => router.push('/receta')}
-              className="flex-1 py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+              className="py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
               style={{ background: 'rgba(255,255,255,0.15)', color: '#FFFFFF' }}>
               📄 Receta
             </button>
+            <button onClick={() => router.push('/historial')}
+              className="py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+              style={{ background: 'rgba(255,255,255,0.15)', color: '#FFFFFF' }}>
+              🧾 Historial
+            </button>
             <button onClick={() => router.push('/perfil')}
-              className="flex-1 py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+              className="py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
               style={{ background: 'rgba(255,255,255,0.15)', color: '#FFFFFF' }}>
               🎫 Convenios
             </button>

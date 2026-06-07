@@ -1,11 +1,14 @@
 'use client'
-// app/plan/page.tsx
-// Plan de toma diario: organiza los remedios del usuario por momento del día.
-// Diseño accesible: texto grande, alto contraste, secciones claras.
+// app/plan/page.tsx — versión 2
+// Plan de toma con agregar/editar remedios manualmente.
+// Incluye días de la semana, horario y duración (crónico o N días).
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { obtenerUsuario, obtenerPlanToma } from '../../lib/auth'
+import { supabase } from '../../lib/supabase'
+
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface RemedioPlan {
   id: number
@@ -13,47 +16,200 @@ interface RemedioPlan {
   dosis_texto: string | null
   posologia: string | null
   momento_toma: string[] | null
+  dias_semana: string[] | null
+  duracion_dias: number | null
+  permanente: boolean | null
   notas: string | null
   producto: { nombre_comercial: string; dosis_forma: string } | null
 }
 
+interface FormRemedio {
+  id: number | null
+  nombre: string
+  dosis: string
+  posologia: string
+  momento: string[]
+  diasSemana: string[]
+  todosLosDias: boolean
+  cronico: boolean
+  duracionDias: string
+}
+
+const FORM_VACIO: FormRemedio = {
+  id: null, nombre: '', dosis: '', posologia: '',
+  momento: [], diasSemana: [], todosLosDias: true,
+  cronico: true, duracionDias: ''
+}
+
 const MOMENTOS = [
-  { value: 'mañana',   label: 'En la mañana',   emoji: '🌅', hora: 'Al despertar' },
-  { value: 'mediodia', label: 'Al mediodía',    emoji: '☀️', hora: 'Con el almuerzo' },
-  { value: 'noche',    label: 'En la noche',    emoji: '🌙', hora: 'Antes de dormir' },
+  { value: 'mañana',   label: 'Mañana',   emoji: '🌅' },
+  { value: 'mediodia', label: 'Mediodía', emoji: '☀️' },
+  { value: 'noche',    label: 'Noche',    emoji: '🌙' },
 ]
+
+const DIAS = [
+  { value: 'lunes',     label: 'Lu' },
+  { value: 'martes',    label: 'Ma' },
+  { value: 'miercoles', label: 'Mi' },
+  { value: 'jueves',    label: 'Ju' },
+  { value: 'viernes',   label: 'Vi' },
+  { value: 'sabado',    label: 'Sá' },
+  { value: 'domingo',   label: 'Do' },
+]
+
+// ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function PlanPage() {
   const router = useRouter()
-  const [usuario, setUsuario] = useState<any>(null)
-  const [remedios, setRemedios] = useState<RemedioPlan[]>([])
-  const [cargando, setCargando] = useState(true)
+  const [usuario, setUsuario]     = useState<any>(null)
+  const [remedios, setRemedios]   = useState<RemedioPlan[]>([])
+  const [cargando, setCargando]   = useState(true)
+  const [mostarForm, setMostrarForm] = useState(false)
+  const [form, setForm]           = useState<FormRemedio>(FORM_VACIO)
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError]         = useState<string | null>(null)
+  const [busqueda, setBusqueda]   = useState('')
+  const [sugerencias, setSugerencias] = useState<any[]>([])
 
   useEffect(() => {
     obtenerUsuario().then(u => {
       if (!u) { router.push('/auth'); return }
       setUsuario(u)
-      obtenerPlanToma(u.id).then(data => {
-        setRemedios(data as any)
-        setCargando(false)
-      })
+      cargarRemedios(u.id)
     })
   }, [router])
 
-  function nombreRemedio(r: RemedioPlan): string {
+  async function cargarRemedios(uid: string) {
+    setCargando(true)
+    const data = await obtenerPlanToma(uid)
+    setRemedios(data as any)
+    setCargando(false)
+  }
+
+  // Autocompletado de búsqueda
+  useEffect(() => {
+    if (busqueda.length < 2) { setSugerencias([]); return }
+    const t = setTimeout(async () => {
+      const res = await fetch(`/api/buscar?q=${encodeURIComponent(busqueda)}`)
+      if (res.ok) { const d = await res.json(); setSugerencias(d.resultados ?? []) }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [busqueda])
+
+  function abrirNuevo() {
+    setForm(FORM_VACIO)
+    setBusqueda('')
+    setSugerencias([])
+    setError(null)
+    setMostrarForm(true)
+  }
+
+  function abrirEditar(r: RemedioPlan) {
+    setForm({
+      id:           r.id,
+      nombre:       r.producto?.nombre_comercial ?? r.notas ?? '',
+      dosis:        r.dosis_texto ?? '',
+      posologia:    r.posologia ?? '',
+      momento:      r.momento_toma ?? [],
+      diasSemana:   r.dias_semana ?? [],
+      todosLosDias: !r.dias_semana || r.dias_semana.length === 0,
+      cronico:      !r.duracion_dias,
+      duracionDias: r.duracion_dias?.toString() ?? '',
+    })
+    setBusqueda(r.producto?.nombre_comercial ?? r.notas ?? '')
+    setSugerencias([])
+    setError(null)
+    setMostrarForm(true)
+  }
+
+  function toggleMomento(m: string) {
+    setForm(prev => ({
+      ...prev,
+      momento: prev.momento.includes(m) ? prev.momento.filter(x => x !== m) : [...prev.momento, m]
+    }))
+  }
+
+  function toggleDia(d: string) {
+    setForm(prev => ({
+      ...prev,
+      diasSemana: prev.diasSemana.includes(d) ? prev.diasSemana.filter(x => x !== d) : [...prev.diasSemana, d]
+    }))
+  }
+
+  async function handleGuardar() {
+    if (!usuario) return
+    if (!form.nombre.trim()) { setError('Escribe el nombre del remedio.'); return }
+    if (form.momento.length === 0) { setError('Selecciona al menos un horario.'); return }
+
+    setGuardando(true)
+    setError(null)
+
+    try {
+      // Buscar producto_id
+      let productoId: number | null = null
+      const res = await fetch(`/api/buscar?q=${encodeURIComponent(form.nombre)}`)
+      if (res.ok) {
+        const d = await res.json()
+        productoId = d.resultados?.[0]?.id ?? null
+      }
+
+      const registro = {
+        usuario_id:    usuario.id,
+        producto_id:   productoId,
+        dosis_texto:   form.dosis || null,
+        posologia:     form.posologia || null,
+        momento_toma:  form.momento,
+        dias_semana:   form.todosLosDias ? null : form.diasSemana,
+        duracion_dias: form.cronico ? null : (parseInt(form.duracionDias) || null),
+        permanente:    form.cronico,
+        notas:         productoId ? null : form.nombre,
+        activo:        true,
+      }
+
+      if (form.id) {
+        await supabase.from('usuario_remedio').update(registro).eq('id', form.id)
+      } else {
+        await supabase.from('usuario_remedio').insert(registro)
+      }
+
+      setMostrarForm(false)
+      await cargarRemedios(usuario.id)
+    } catch {
+      setError('Error al guardar. Intenta de nuevo.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  async function handleEliminar(id: number) {
+    if (!confirm('¿Eliminar este remedio del plan?')) return
+    await supabase.from('usuario_remedio').update({ activo: false }).eq('id', id)
+    setRemedios(prev => prev.filter(r => r.id !== id))
+  }
+
+  function nombreRemedio(r: RemedioPlan) {
     return r.producto?.nombre_comercial ?? r.notas ?? 'Remedio'
   }
 
-  function remediosPorMomento(momento: string): RemedioPlan[] {
+  function descDias(r: RemedioPlan) {
+    if (!r.dias_semana || r.dias_semana.length === 0) return 'Todos los días'
+    return r.dias_semana.map(d => d.slice(0, 2)).join(', ')
+  }
+
+  function descDuracion(r: RemedioPlan) {
+    if (r.permanente || !r.duracion_dias) return 'Crónico'
+    return `${r.duracion_dias} días`
+  }
+
+  function remediosPorMomento(momento: string) {
     return remedios.filter(r => (r.momento_toma ?? []).includes(momento))
   }
 
-  const sinHorario = remedios.filter(r => !r.momento_toma || r.momento_toma.length === 0)
-
-  if (!usuario) return null
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <main className="min-h-screen pb-12" style={{ background: '#EFF4F0' }}>
+
       {/* Header */}
       <div style={{ background: '#0B5966' }} className="px-6 pt-12 pb-8 text-white">
         <button onClick={() => router.push('/')} className="flex items-center gap-2 mb-4 opacity-80">
@@ -62,11 +218,20 @@ export default function PlanPage() {
           </svg>
           <span className="text-base">Volver</span>
         </button>
-        <h1 className="text-2xl font-bold">Mi plan de remedios</h1>
-        <p className="text-base mt-1" style={{ color: '#A8D8CE' }}>Qué tomar y cuándo</p>
+        <div className="flex items-end justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Mi plan de remedios</h1>
+            <p className="text-base mt-1" style={{ color: '#A8D8CE' }}>Qué tomar y cuándo</p>
+          </div>
+          <button onClick={abrirNuevo}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm"
+            style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
+            <span className="text-lg">+</span> Agregar
+          </button>
+        </div>
       </div>
 
-      <div className="max-w-md mx-auto px-4 py-6">
+      <div className="max-w-md mx-auto px-4 py-6 space-y-5">
 
         {cargando && (
           <div className="bg-white rounded-2xl p-12 text-center shadow-sm">
@@ -76,93 +241,240 @@ export default function PlanPage() {
           </div>
         )}
 
-        {/* Sin remedios */}
         {!cargando && remedios.length === 0 && (
           <div className="text-center py-10">
-            <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5"
-              style={{ background: 'rgba(11,89,102,0.1)' }}>
-              <svg className="w-10 h-10" style={{ color: '#0B5966' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-              </svg>
+            <p className="text-gray-700 text-lg font-medium mb-2">Aún no tienes remedios</p>
+            <p className="text-gray-500 text-base mb-5">Escanea tu receta o agrégalos manualmente</p>
+            <div className="flex gap-3">
+              <button onClick={() => router.push('/receta')}
+                className="flex-1 py-4 rounded-2xl text-white font-bold text-base"
+                style={{ background: '#0B5966' }}>
+                📄 Escanear receta
+              </button>
+              <button onClick={abrirNuevo}
+                className="flex-1 py-4 rounded-2xl font-bold text-base border-2"
+                style={{ borderColor: '#0B5966', color: '#0B5966', background: 'white' }}>
+                + Agregar
+              </button>
             </div>
-            <p className="text-gray-700 text-lg font-medium mb-2">Aún no tienes un plan</p>
-            <p className="text-gray-500 text-base mb-5">Escanea tu receta médica para crear tu plan de toma</p>
-            <button onClick={() => router.push('/receta')}
-              className="px-6 py-4 rounded-2xl text-white font-bold text-lg"
-              style={{ background: '#0B5966' }}>
-              📄 Escanear receta
-            </button>
           </div>
         )}
 
         {/* Plan por momentos */}
-        {!cargando && remedios.length > 0 && (
-          <div className="space-y-5">
-            {MOMENTOS.map(mom => {
-              const lista = remediosPorMomento(mom.value)
-              if (lista.length === 0) return null
-              return (
-                <div key={mom.value} className="bg-white rounded-2xl shadow-sm overflow-hidden">
-                  {/* Cabecera del momento */}
-                  <div className="px-5 py-4 flex items-center gap-3" style={{ background: 'rgba(11,89,102,0.06)' }}>
-                    <span className="text-3xl">{mom.emoji}</span>
-                    <div>
-                      <p className="text-lg font-bold" style={{ color: '#0B5966' }}>{mom.label}</p>
-                      <p className="text-sm text-gray-500">{mom.hora}</p>
-                    </div>
-                    <span className="ml-auto text-2xl font-bold" style={{ color: '#0B5966' }}>{lista.length}</span>
-                  </div>
-                  {/* Remedios de este momento */}
-                  <div className="divide-y divide-gray-100">
-                    {lista.map(r => (
-                      <div key={r.id} className="px-5 py-4 flex items-center gap-4">
-                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: '#1D9E75' }}/>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-lg font-semibold text-gray-900" style={{ color: '#1A2E2E' }}>
-                            {nombreRemedio(r)}
-                          </p>
-                          <p className="text-base text-gray-600">
-                            {r.dosis_texto && <span>{r.dosis_texto} · </span>}
-                            {r.posologia ?? '1 dosis'}
-                          </p>
+        {!cargando && remedios.length > 0 && MOMENTOS.map(mom => {
+          const lista = remediosPorMomento(mom.value)
+          if (lista.length === 0) return null
+          return (
+            <div key={mom.value} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <div className="px-5 py-4 flex items-center gap-3" style={{ background: 'rgba(11,89,102,0.06)' }}>
+                <span className="text-3xl">{mom.emoji}</span>
+                <p className="text-lg font-bold flex-1" style={{ color: '#0B5966' }}>{mom.label}</p>
+                <span className="text-2xl font-bold" style={{ color: '#0B5966' }}>{lista.length}</span>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {lista.map(r => (
+                  <div key={r.id} className="px-5 py-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-3 h-3 rounded-full mt-2 flex-shrink-0" style={{ background: '#1D9E75' }}/>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-lg font-semibold" style={{ color: '#1A2E2E' }}>{nombreRemedio(r)}</p>
+                        <p className="text-base text-gray-600">
+                          {r.dosis_texto && <span>{r.dosis_texto} · </span>}
+                          {r.posologia ?? '1 dosis'}
+                        </p>
+                        <div className="flex gap-3 mt-1">
+                          <span className="text-sm text-gray-500">{descDias(r)}</span>
+                          <span className="text-sm" style={{ color: r.permanente || !r.duracion_dias ? '#0B5966' : '#EF9F27' }}>
+                            {descDuracion(r)}
+                          </span>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-
-            {/* Remedios sin horario asignado */}
-            {sinHorario.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-                <div className="px-5 py-4" style={{ background: '#F3F4F6' }}>
-                  <p className="text-lg font-bold text-gray-600">Sin horario definido</p>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {sinHorario.map(r => (
-                    <div key={r.id} className="px-5 py-4 flex items-center gap-4">
-                      <div className="w-3 h-3 rounded-full flex-shrink-0 bg-gray-300"/>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-lg font-semibold text-gray-900">{nombreRemedio(r)}</p>
-                        <p className="text-base text-gray-600">{r.dosis_texto ?? ''} {r.posologia ?? ''}</p>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button onClick={() => abrirEditar(r)}
+                          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100">
+                          ✏️
+                        </button>
+                        <button onClick={() => handleEliminar(r.id)}
+                          className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500">
+                          🗑
+                        </button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
+          )
+        })}
 
-            {/* Botón escanear otra receta */}
+        {/* Botones al fondo */}
+        {!cargando && remedios.length > 0 && (
+          <div className="flex gap-3">
             <button onClick={() => router.push('/receta')}
-              className="w-full py-4 rounded-2xl border-2 text-lg font-bold flex items-center justify-center gap-2"
+              className="flex-1 py-4 rounded-2xl font-bold text-base border-2"
               style={{ borderColor: '#0B5966', color: '#0B5966', background: 'white' }}>
-              📄 Escanear otra receta
+              📄 Escanear receta
+            </button>
+            <button onClick={abrirNuevo}
+              className="flex-1 py-4 rounded-2xl text-white font-bold text-base"
+              style={{ background: '#0B5966' }}>
+              + Agregar
             </button>
           </div>
         )}
       </div>
+
+      {/* ── Modal / drawer de agregar/editar ── */}
+      {mostarForm && (
+        <div className="fixed inset-0 z-50 flex items-end" style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={e => { if (e.target === e.currentTarget) setMostrarForm(false) }}>
+          <div className="w-full bg-white rounded-t-3xl max-h-[90vh] overflow-y-auto">
+            <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold" style={{ color: '#1A2E2E' }}>
+                  {form.id ? 'Editar remedio' : 'Agregar remedio'}
+                </h2>
+                <button onClick={() => setMostrarForm(false)} className="text-gray-400 text-2xl leading-none">✕</button>
+              </div>
+            </div>
+
+            <div className="px-6 py-5 space-y-5">
+
+              {/* Nombre con autocompletado */}
+              <div>
+                <label className="block text-base font-semibold text-gray-700 mb-2">Nombre del remedio</label>
+                <input type="text" value={busqueda}
+                  onChange={e => { setBusqueda(e.target.value); setForm(prev => ({ ...prev, nombre: e.target.value })) }}
+                  placeholder="Ej: Losartán, Metformina..."
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 text-base outline-none focus:border-[#0B5966]"
+                  style={{ color: '#1A2E2E' }}/>
+                {sugerencias.length > 0 && (
+                  <div className="mt-1 bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden">
+                    {sugerencias.slice(0, 4).map((s: any) => (
+                      <button key={s.id} onClick={() => {
+                        setBusqueda(s.nombre_comercial)
+                        setForm(prev => ({ ...prev, nombre: s.nombre_comercial }))
+                        setSugerencias([])
+                      }} className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0">
+                        <p className="font-semibold text-base" style={{ color: '#1A2E2E' }}>{s.nombre_comercial}</p>
+                        <p className="text-sm text-gray-500">{s.principios} · {s.dosis_forma}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Dosis */}
+              <div>
+                <label className="block text-base font-semibold text-gray-700 mb-2">Dosis</label>
+                <input type="text" value={form.dosis}
+                  onChange={e => setForm(prev => ({ ...prev, dosis: e.target.value }))}
+                  placeholder="Ej: 5 mg, 500 mg..."
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 text-base outline-none focus:border-[#0B5966]"
+                  style={{ color: '#1A2E2E' }}/>
+              </div>
+
+              {/* Posología */}
+              <div>
+                <label className="block text-base font-semibold text-gray-700 mb-2">Instrucción de toma</label>
+                <input type="text" value={form.posologia}
+                  onChange={e => setForm(prev => ({ ...prev, posologia: e.target.value }))}
+                  placeholder="Ej: 1 comprimido, 2 cápsulas..."
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 text-base outline-none focus:border-[#0B5966]"
+                  style={{ color: '#1A2E2E' }}/>
+              </div>
+
+              {/* Horario */}
+              <div>
+                <label className="block text-base font-semibold text-gray-700 mb-3">Horario de toma</label>
+                <div className="flex gap-3">
+                  {MOMENTOS.map(m => {
+                    const activo = form.momento.includes(m.value)
+                    return (
+                      <button key={m.value} onClick={() => toggleMomento(m.value)}
+                        className="flex-1 py-4 rounded-xl text-base font-bold transition-colors"
+                        style={activo
+                          ? { background: '#0B5966', color: '#FFFFFF' }
+                          : { background: '#F3F4F6', color: '#4B5563' }}>
+                        {m.emoji}<br/>{m.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Días */}
+              <div>
+                <label className="block text-base font-semibold text-gray-700 mb-3">Días de toma</label>
+                <label className="flex items-center gap-3 cursor-pointer mb-3">
+                  <div onClick={() => setForm(prev => ({ ...prev, todosLosDias: !prev.todosLosDias }))}
+                    className="w-12 h-7 rounded-full transition-colors flex items-center px-1"
+                    style={{ background: form.todosLosDias ? '#0B5966' : '#d1d5db' }}>
+                    <div className="w-5 h-5 rounded-full bg-white shadow transition-transform"
+                      style={{ transform: form.todosLosDias ? 'translateX(20px)' : 'none' }}/>
+                  </div>
+                  <span className="text-base text-gray-700 font-medium">Todos los días</span>
+                </label>
+                {!form.todosLosDias && (
+                  <div className="flex gap-2">
+                    {DIAS.map(d => {
+                      const activo = form.diasSemana.includes(d.value)
+                      return (
+                        <button key={d.value} onClick={() => toggleDia(d.value)}
+                          className="flex-1 py-3 rounded-xl text-sm font-bold transition-colors"
+                          style={activo
+                            ? { background: '#0B5966', color: '#FFFFFF' }
+                            : { background: '#F3F4F6', color: '#6B7280' }}>
+                          {d.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Duración */}
+              <div>
+                <label className="block text-base font-semibold text-gray-700 mb-3">Duración</label>
+                <div className="flex gap-3 mb-3">
+                  <button onClick={() => setForm(prev => ({ ...prev, cronico: true }))}
+                    className="flex-1 py-3 rounded-xl text-base font-bold transition-colors"
+                    style={form.cronico
+                      ? { background: '#0B5966', color: '#FFFFFF' }
+                      : { background: '#F3F4F6', color: '#6B7280' }}>
+                    ♾ Crónico
+                  </button>
+                  <button onClick={() => setForm(prev => ({ ...prev, cronico: false }))}
+                    className="flex-1 py-3 rounded-xl text-base font-bold transition-colors"
+                    style={!form.cronico
+                      ? { background: '#EF9F27', color: '#FFFFFF' }
+                      : { background: '#F3F4F6', color: '#6B7280' }}>
+                    📅 Por días
+                  </button>
+                </div>
+                {!form.cronico && (
+                  <div className="flex items-center gap-3">
+                    <input type="number" value={form.duracionDias}
+                      onChange={e => setForm(prev => ({ ...prev, duracionDias: e.target.value }))}
+                      placeholder="30" min={1} max={365}
+                      className="w-28 px-4 py-3 rounded-xl border-2 border-gray-200 text-base outline-none focus:border-[#0B5966] text-center font-bold"
+                      style={{ color: '#1A2E2E' }}/>
+                    <span className="text-base text-gray-600">días</span>
+                  </div>
+                )}
+              </div>
+
+              {error && <p className="text-base text-red-700 font-medium">{error}</p>}
+
+              <button onClick={handleGuardar} disabled={guardando}
+                className="w-full py-5 rounded-2xl text-white font-bold text-lg disabled:opacity-50"
+                style={{ background: '#0B5966' }}>
+                {guardando ? 'Guardando...' : form.id ? 'Guardar cambios' : 'Agregar al plan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
