@@ -40,6 +40,9 @@ interface FormRemedio {
   horaManana: string
   horaMediodia: string
   horaNoche: string
+  alarma_mañana: boolean
+  alarma_mediodia: boolean
+  alarma_noche: boolean
 }
 
 const FORM_VACIO: FormRemedio = {
@@ -47,6 +50,7 @@ const FORM_VACIO: FormRemedio = {
   momento: [], diasSemana: [], todosLosDias: true,
   cronico: true, duracionDias: '',
   horaManana: '08:00', horaMediodia: '13:00', horaNoche: '21:00',
+  alarma_mañana: false, alarma_mediodia: false, alarma_noche: false,
 }
 
 const MOMENTOS = [
@@ -175,12 +179,17 @@ export default function PlanPage() {
         const { error } = await supabase.from('usuario_remedio').update(registro).eq('id', form.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('usuario_remedio').insert(registro)
+        const { error } = await supabase.from('usuario_remedio')
+          .upsert(registro, { onConflict: 'usuario_id,producto_id' })
         if (error) throw error
       }
 
       setMostrarForm(false)
-      await cargarRemedios(usuario.id)
+      const actualizados = await obtenerPlanToma(usuario.id) as any[]
+      setRemedios(actualizados)
+      // Programar alarmas si el usuario las activó
+      const tieneAlarmas = form.alarma_mañana || form.alarma_mediodia || form.alarma_noche
+      if (tieneAlarmas) await programarAlarmas(actualizados)
     } catch (e: any) {
       setError(e.message ?? 'Error al guardar.')
     } finally {
@@ -472,20 +481,44 @@ export default function PlanPage() {
                   {MOMENTOS.map(m => {
                     const activo = form.momento.includes(m.value)
                     const horaKey = m.horaKey as keyof FormRemedio
+                    const alarmaKey = `alarma_${m.value}` as keyof FormRemedio
                     return (
-                      <div key={m.value} className="flex items-center gap-3">
-                        <button onClick={() => toggleMomento(m.value)}
-                          className="flex-1 py-3.5 rounded-xl text-base font-bold transition-colors flex items-center justify-center gap-2"
-                          style={activo
-                            ? { background: '#0B5966', color: '#FFFFFF' }
-                            : { background: '#F3F4F6', color: '#6B7280' }}>
-                          {m.emoji} {m.label}
-                        </button>
+                      <div key={m.value} className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => toggleMomento(m.value)}
+                            className="flex-1 py-3.5 rounded-xl text-base font-bold transition-colors flex items-center justify-center gap-2"
+                            style={activo
+                              ? { background: '#0B5966', color: '#FFFFFF' }
+                              : { background: '#F3F4F6', color: '#6B7280' }}>
+                            {m.emoji} {m.label}
+                          </button>
+                          {activo && (
+                            <input type="time" value={form[horaKey] as string}
+                              onChange={e => setForm(prev => ({ ...prev, [horaKey]: e.target.value }))}
+                              className="px-3 py-3 rounded-xl border-2 border-gray-200 text-base font-bold outline-none focus:border-[#0B5966] w-28"
+                              style={{ color: '#1A2E2E' }}/>
+                          )}
+                        </div>
                         {activo && (
-                          <input type="time" value={form[horaKey] as string}
-                            onChange={e => setForm(prev => ({ ...prev, [horaKey]: e.target.value }))}
-                            className="px-3 py-3 rounded-xl border-2 border-gray-200 text-base font-bold outline-none focus:border-[#0B5966] w-28"
-                            style={{ color: '#1A2E2E' }}/>
+                          <div className="flex items-center gap-3 px-1">
+                            <div
+                              onClick={async () => {
+                                if (!form[alarmaKey]) {
+                                  const ok = notifActivas || await activarNotificaciones()
+                                  if (ok) setForm(prev => ({ ...prev, [alarmaKey]: true }))
+                                } else {
+                                  setForm(prev => ({ ...prev, [alarmaKey]: false }))
+                                }
+                              }}
+                              className="w-10 h-6 rounded-full transition-colors flex items-center px-1 cursor-pointer flex-shrink-0"
+                              style={{ background: form[alarmaKey] ? '#EF9F27' : '#d1d5db' }}>
+                              <div className="w-4 h-4 rounded-full bg-white shadow transition-transform"
+                                style={{ transform: form[alarmaKey] ? 'translateX(16px)' : 'none' }}/>
+                            </div>
+                            <span className="text-sm text-gray-600">
+                              🔔 Alarma a las {form[horaKey] as string}
+                            </span>
+                          </div>
                         )}
                       </div>
                     )
