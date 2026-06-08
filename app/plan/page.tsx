@@ -1,11 +1,11 @@
 'use client'
-// app/plan/page.tsx — versión 2
-// Plan de toma con agregar/editar remedios manualmente.
-// Incluye días de la semana, horario y duración (crónico o N días).
+// app/plan/page.tsx — versión 3
+// Agrega: horas de toma por momento, exportar a calendario (.ics),
+// y recordatorio en el navegador.
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { obtenerUsuario, obtenerPlanToma } from '../../lib/auth'
+import { obtenerUsuario, obtenerPlanToma, generarICS, descargarICS } from '../../lib/auth'
 import { supabase } from '../../lib/supabase'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -19,6 +19,9 @@ interface RemedioPlan {
   dias_semana: string[] | null
   duracion_dias: number | null
   permanente: boolean | null
+  hora_manana: string | null
+  hora_mediodia: string | null
+  hora_noche: string | null
   notas: string | null
   producto: { nombre_comercial: string; dosis_forma: string } | null
 }
@@ -33,18 +36,22 @@ interface FormRemedio {
   todosLosDias: boolean
   cronico: boolean
   duracionDias: string
+  horaManana: string
+  horaMediodia: string
+  horaNoche: string
 }
 
 const FORM_VACIO: FormRemedio = {
   id: null, nombre: '', dosis: '', posologia: '',
   momento: [], diasSemana: [], todosLosDias: true,
-  cronico: true, duracionDias: ''
+  cronico: true, duracionDias: '',
+  horaManana: '08:00', horaMediodia: '13:00', horaNoche: '21:00',
 }
 
 const MOMENTOS = [
-  { value: 'mañana',   label: 'Mañana',   emoji: '🌅' },
-  { value: 'mediodia', label: 'Mediodía', emoji: '☀️' },
-  { value: 'noche',    label: 'Noche',    emoji: '🌙' },
+  { value: 'mañana',   label: 'Mañana',   emoji: '🌅', horaKey: 'horaManana',   default: '08:00' },
+  { value: 'mediodia', label: 'Mediodía', emoji: '☀️', horaKey: 'horaMediodia', default: '13:00' },
+  { value: 'noche',    label: 'Noche',    emoji: '🌙', horaKey: 'horaNoche',    default: '21:00' },
 ]
 
 const DIAS = [
@@ -61,15 +68,17 @@ const DIAS = [
 
 export default function PlanPage() {
   const router = useRouter()
-  const [usuario, setUsuario]     = useState<any>(null)
-  const [remedios, setRemedios]   = useState<RemedioPlan[]>([])
-  const [cargando, setCargando]   = useState(true)
-  const [mostarForm, setMostrarForm] = useState(false)
-  const [form, setForm]           = useState<FormRemedio>(FORM_VACIO)
-  const [guardando, setGuardando] = useState(false)
-  const [error, setError]         = useState<string | null>(null)
-  const [busqueda, setBusqueda]   = useState('')
+  const [usuario, setUsuario]       = useState<any>(null)
+  const [remedios, setRemedios]     = useState<RemedioPlan[]>([])
+  const [cargando, setCargando]     = useState(true)
+  const [mostrarForm, setMostrarForm] = useState(false)
+  const [form, setForm]             = useState<FormRemedio>(FORM_VACIO)
+  const [guardando, setGuardando]   = useState(false)
+  const [error, setError]           = useState<string | null>(null)
+  const [busqueda, setBusqueda]     = useState('')
   const [sugerencias, setSugerencias] = useState<any[]>([])
+  const [exportando, setExportando] = useState(false)
+  const [notifOk, setNotifOk]       = useState(false)
 
   useEffect(() => {
     obtenerUsuario().then(u => {
@@ -86,7 +95,7 @@ export default function PlanPage() {
     setCargando(false)
   }
 
-  // Autocompletado de búsqueda
+  // Autocompletado
   useEffect(() => {
     if (busqueda.length < 2) { setSugerencias([]); return }
     const t = setTimeout(async () => {
@@ -97,29 +106,26 @@ export default function PlanPage() {
   }, [busqueda])
 
   function abrirNuevo() {
-    setForm(FORM_VACIO)
-    setBusqueda('')
-    setSugerencias([])
-    setError(null)
-    setMostrarForm(true)
+    setForm(FORM_VACIO); setBusqueda(''); setSugerencias([]); setError(null); setMostrarForm(true)
   }
 
   function abrirEditar(r: RemedioPlan) {
     setForm({
-      id:           r.id,
-      nombre:       r.producto?.nombre_comercial ?? r.notas ?? '',
-      dosis:        r.dosis_texto ?? '',
-      posologia:    r.posologia ?? '',
-      momento:      r.momento_toma ?? [],
-      diasSemana:   r.dias_semana ?? [],
+      id: r.id,
+      nombre: r.producto?.nombre_comercial ?? r.notas ?? '',
+      dosis: r.dosis_texto ?? '',
+      posologia: r.posologia ?? '',
+      momento: r.momento_toma ?? [],
+      diasSemana: r.dias_semana ?? [],
       todosLosDias: !r.dias_semana || r.dias_semana.length === 0,
-      cronico:      !r.duracion_dias,
+      cronico: !r.duracion_dias,
       duracionDias: r.duracion_dias?.toString() ?? '',
+      horaManana: r.hora_manana ?? '08:00',
+      horaMediodia: r.hora_mediodia ?? '13:00',
+      horaNoche: r.hora_noche ?? '21:00',
     })
     setBusqueda(r.producto?.nombre_comercial ?? r.notas ?? '')
-    setSugerencias([])
-    setError(null)
-    setMostrarForm(true)
+    setSugerencias([]); setError(null); setMostrarForm(true)
   }
 
   function toggleMomento(m: string) {
@@ -140,18 +146,12 @@ export default function PlanPage() {
     if (!usuario) return
     if (!form.nombre.trim()) { setError('Escribe el nombre del remedio.'); return }
     if (form.momento.length === 0) { setError('Selecciona al menos un horario.'); return }
-
-    setGuardando(true)
-    setError(null)
+    setGuardando(true); setError(null)
 
     try {
-      // Buscar producto_id
       let productoId: number | null = null
       const res = await fetch(`/api/buscar?q=${encodeURIComponent(form.nombre)}`)
-      if (res.ok) {
-        const d = await res.json()
-        productoId = d.resultados?.[0]?.id ?? null
-      }
+      if (res.ok) { const d = await res.json(); productoId = d.resultados?.[0]?.id ?? null }
 
       const registro = {
         usuario_id:    usuario.id,
@@ -162,20 +162,25 @@ export default function PlanPage() {
         dias_semana:   form.todosLosDias ? null : form.diasSemana,
         duracion_dias: form.cronico ? null : (parseInt(form.duracionDias) || null),
         permanente:    form.cronico,
+        hora_manana:   form.momento.includes('mañana')   ? form.horaManana   : null,
+        hora_mediodia: form.momento.includes('mediodia') ? form.horaMediodia : null,
+        hora_noche:    form.momento.includes('noche')    ? form.horaNoche    : null,
         notas:         productoId ? null : form.nombre,
         activo:        true,
       }
 
       if (form.id) {
-        await supabase.from('usuario_remedio').update(registro).eq('id', form.id)
+        const { error } = await supabase.from('usuario_remedio').update(registro).eq('id', form.id)
+        if (error) throw error
       } else {
-        await supabase.from('usuario_remedio').insert(registro)
+        const { error } = await supabase.from('usuario_remedio').insert(registro)
+        if (error) throw error
       }
 
       setMostrarForm(false)
       await cargarRemedios(usuario.id)
-    } catch {
-      setError('Error al guardar. Intenta de nuevo.')
+    } catch (e: any) {
+      setError(e.message ?? 'Error al guardar.')
     } finally {
       setGuardando(false)
     }
@@ -187,18 +192,93 @@ export default function PlanPage() {
     setRemedios(prev => prev.filter(r => r.id !== id))
   }
 
+  // ── Exportar a calendario ──────────────────────────────────────────────────
+  function handleExportarCalendario() {
+    setExportando(true)
+    try {
+      const datos = remedios.map(r => ({
+        nombre:      r.producto?.nombre_comercial ?? r.notas ?? 'Remedio',
+        dosis:       r.dosis_texto ?? '',
+        posologia:   r.posologia ?? '1 dosis',
+        momento_toma: r.momento_toma ?? [],
+        hora_manana:   r.hora_manana,
+        hora_mediodia: r.hora_mediodia,
+        hora_noche:    r.hora_noche,
+      }))
+      const ics = generarICS(datos)
+      descargarICS(ics)
+    } finally {
+      setExportando(false)
+    }
+  }
+
+  // ── Notificaciones del navegador ───────────────────────────────────────────
+  async function handleActivarNotificaciones() {
+    if (!('Notification' in window)) {
+      alert('Tu navegador no soporta notificaciones.')
+      return
+    }
+    const permiso = await Notification.requestPermission()
+    if (permiso === 'granted') {
+      setNotifOk(true)
+      // Programar notificaciones para hoy
+      programarNotificaciones()
+    } else {
+      alert('No se pudo activar las notificaciones. Verifica los permisos del navegador.')
+    }
+  }
+
+  function programarNotificaciones() {
+    const ahora = new Date()
+    remedios.forEach(r => {
+      const nombre = r.producto?.nombre_comercial ?? r.notas ?? 'Remedio'
+      const horarios: Record<string, string | null> = {
+        'mañana':   r.hora_manana,
+        'mediodia': r.hora_mediodia,
+        'noche':    r.hora_noche,
+      }
+      const horas_defecto: Record<string, string> = {
+        'mañana': '08:00', 'mediodia': '13:00', 'noche': '21:00'
+      };
+      (r.momento_toma ?? []).forEach(momento => {
+        const hora = horarios[momento] ?? horas_defecto[momento]
+        const [h, m] = hora.split(':').map(Number)
+        const objetivo = new Date()
+        objetivo.setHours(h, m, 0, 0)
+        const diff = objetivo.getTime() - ahora.getTime()
+        if (diff > 0) {
+          setTimeout(() => {
+            new Notification(`💊 ${nombre}`, {
+              body: `${r.dosis_texto ?? ''} — ${r.posologia ?? '1 dosis'}`,
+              icon: '/favicon.ico',
+            })
+          }, diff)
+        }
+      })
+    })
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
   function nombreRemedio(r: RemedioPlan) {
     return r.producto?.nombre_comercial ?? r.notas ?? 'Remedio'
   }
 
   function descDias(r: RemedioPlan) {
     if (!r.dias_semana || r.dias_semana.length === 0) return 'Todos los días'
-    return r.dias_semana.map(d => d.slice(0, 2)).join(', ')
+    return r.dias_semana.map(d => d.slice(0,2)).join(', ')
   }
 
   function descDuracion(r: RemedioPlan) {
     if (r.permanente || !r.duracion_dias) return 'Crónico'
     return `${r.duracion_dias} días`
+  }
+
+  function horaRemedio(r: RemedioPlan, momento: string): string | null {
+    if (momento === 'mañana')   return r.hora_manana
+    if (momento === 'mediodia') return r.hora_mediodia
+    if (momento === 'noche')    return r.hora_noche
+    return null
   }
 
   function remediosPorMomento(momento: string) {
@@ -231,7 +311,7 @@ export default function PlanPage() {
         </div>
       </div>
 
-      <div className="max-w-md mx-auto px-4 py-6 space-y-5">
+      <div className="max-w-md mx-auto px-4 py-6 space-y-4">
 
         {cargando && (
           <div className="bg-white rounded-2xl p-12 text-center shadow-sm">
@@ -241,9 +321,10 @@ export default function PlanPage() {
           </div>
         )}
 
+        {/* Sin remedios */}
         {!cargando && remedios.length === 0 && (
           <div className="text-center py-10">
-            <p className="text-gray-700 text-lg font-medium mb-2">Aún no tienes remedios</p>
+            <p className="text-gray-700 text-lg font-medium mb-2">Aún no tienes remedios en tu plan</p>
             <p className="text-gray-500 text-base mb-5">Escanea tu receta o agrégalos manualmente</p>
             <div className="flex gap-3">
               <button onClick={() => router.push('/receta')}
@@ -260,16 +341,43 @@ export default function PlanPage() {
           </div>
         )}
 
+        {/* Alarmas (solo si hay remedios) */}
+        {!cargando && remedios.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <p className="text-base font-bold text-gray-800 mb-3">🔔 Recordatorios</p>
+            <div className="flex gap-3">
+              <button onClick={handleExportarCalendario} disabled={exportando}
+                className="flex-1 py-3.5 rounded-xl text-sm font-semibold border-2 flex items-center justify-center gap-2"
+                style={{ borderColor: '#0B5966', color: '#0B5966', background: 'white' }}>
+                📅 Agregar al calendario
+              </button>
+              <button onClick={handleActivarNotificaciones}
+                className="flex-1 py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 text-white"
+                style={{ background: notifOk ? '#1D9E75' : '#0B5966' }}>
+                {notifOk ? '✓ Activado' : '🔔 Notificaciones'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-2 text-center">
+              El calendario crea alarmas recurrentes en Google Calendar o Apple Calendar
+            </p>
+          </div>
+        )}
+
         {/* Plan por momentos */}
-        {!cargando && remedios.length > 0 && MOMENTOS.map(mom => {
+        {!cargando && MOMENTOS.map(mom => {
           const lista = remediosPorMomento(mom.value)
           if (lista.length === 0) return null
           return (
             <div key={mom.value} className="bg-white rounded-2xl shadow-sm overflow-hidden">
               <div className="px-5 py-4 flex items-center gap-3" style={{ background: 'rgba(11,89,102,0.06)' }}>
                 <span className="text-3xl">{mom.emoji}</span>
-                <p className="text-lg font-bold flex-1" style={{ color: '#0B5966' }}>{mom.label}</p>
-                <span className="text-2xl font-bold" style={{ color: '#0B5966' }}>{lista.length}</span>
+                <div className="flex-1">
+                  <p className="text-lg font-bold" style={{ color: '#0B5966' }}>{mom.label}</p>
+                </div>
+                {/* Hora por defecto del momento */}
+                <p className="text-base font-bold" style={{ color: '#0B5966' }}>
+                  {lista[0] ? (horaRemedio(lista[0], mom.value) ?? mom.default) : mom.default}
+                </p>
               </div>
               <div className="divide-y divide-gray-100">
                 {lista.map(r => (
@@ -282,22 +390,22 @@ export default function PlanPage() {
                           {r.dosis_texto && <span>{r.dosis_texto} · </span>}
                           {r.posologia ?? '1 dosis'}
                         </p>
-                        <div className="flex gap-3 mt-1">
+                        <div className="flex gap-3 mt-1 flex-wrap">
                           <span className="text-sm text-gray-500">{descDias(r)}</span>
-                          <span className="text-sm" style={{ color: r.permanente || !r.duracion_dias ? '#0B5966' : '#EF9F27' }}>
+                          <span className="text-sm font-medium"
+                            style={{ color: r.permanente || !r.duracion_dias ? '#0B5966' : '#EF9F27' }}>
                             {descDuracion(r)}
                           </span>
+                          {horaRemedio(r, mom.value) && (
+                            <span className="text-sm font-bold text-gray-700">
+                              🕐 {horaRemedio(r, mom.value)}
+                            </span>
+                          )}
                         </div>
                       </div>
-                      <div className="flex gap-2 flex-shrink-0">
-                        <button onClick={() => abrirEditar(r)}
-                          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100">
-                          ✏️
-                        </button>
-                        <button onClick={() => handleEliminar(r.id)}
-                          className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500">
-                          🗑
-                        </button>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button onClick={() => abrirEditar(r)} className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 text-lg">✏️</button>
+                        <button onClick={() => handleEliminar(r.id)} className="p-2 rounded-lg text-gray-400 hover:bg-red-50 text-lg">🗑</button>
                       </div>
                     </div>
                   </div>
@@ -309,7 +417,7 @@ export default function PlanPage() {
 
         {/* Botones al fondo */}
         {!cargando && remedios.length > 0 && (
-          <div className="flex gap-3">
+          <div className="flex gap-3 pt-2">
             <button onClick={() => router.push('/receta')}
               className="flex-1 py-4 rounded-2xl font-bold text-base border-2"
               style={{ borderColor: '#0B5966', color: '#0B5966', background: 'white' }}>
@@ -324,23 +432,22 @@ export default function PlanPage() {
         )}
       </div>
 
-      {/* ── Modal / drawer de agregar/editar ── */}
-      {mostarForm && (
-        <div className="fixed inset-0 z-50 flex items-end" style={{ background: 'rgba(0,0,0,0.5)' }}
+      {/* ── Modal agregar/editar ── */}
+      {mostrarForm && (
+        <div className="fixed inset-0 z-50 flex items-end"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
           onClick={e => { if (e.target === e.currentTarget) setMostrarForm(false) }}>
-          <div className="w-full bg-white rounded-t-3xl max-h-[90vh] overflow-y-auto">
-            <div className="px-6 pt-6 pb-4 border-b border-gray-100">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold" style={{ color: '#1A2E2E' }}>
-                  {form.id ? 'Editar remedio' : 'Agregar remedio'}
-                </h2>
-                <button onClick={() => setMostrarForm(false)} className="text-gray-400 text-2xl leading-none">✕</button>
-              </div>
+          <div className="w-full bg-white rounded-t-3xl max-h-[92vh] overflow-y-auto">
+            <div className="px-6 pt-6 pb-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-xl font-bold" style={{ color: '#1A2E2E' }}>
+                {form.id ? 'Editar remedio' : 'Agregar remedio'}
+              </h2>
+              <button onClick={() => setMostrarForm(false)} className="text-gray-400 text-2xl">✕</button>
             </div>
 
             <div className="px-6 py-5 space-y-5">
 
-              {/* Nombre con autocompletado */}
+              {/* Nombre */}
               <div>
                 <label className="block text-base font-semibold text-gray-700 mb-2">Nombre del remedio</label>
                 <input type="text" value={busqueda}
@@ -364,40 +471,49 @@ export default function PlanPage() {
                 )}
               </div>
 
-              {/* Dosis */}
-              <div>
-                <label className="block text-base font-semibold text-gray-700 mb-2">Dosis</label>
-                <input type="text" value={form.dosis}
-                  onChange={e => setForm(prev => ({ ...prev, dosis: e.target.value }))}
-                  placeholder="Ej: 5 mg, 500 mg..."
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 text-base outline-none focus:border-[#0B5966]"
-                  style={{ color: '#1A2E2E' }}/>
+              {/* Dosis e instrucción */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-base font-semibold text-gray-700 mb-2">Dosis</label>
+                  <input type="text" value={form.dosis}
+                    onChange={e => setForm(prev => ({ ...prev, dosis: e.target.value }))}
+                    placeholder="Ej: 5 mg"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 text-base outline-none focus:border-[#0B5966]"
+                    style={{ color: '#1A2E2E' }}/>
+                </div>
+                <div>
+                  <label className="block text-base font-semibold text-gray-700 mb-2">Cantidad</label>
+                  <input type="text" value={form.posologia}
+                    onChange={e => setForm(prev => ({ ...prev, posologia: e.target.value }))}
+                    placeholder="Ej: 1 comprimido"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 text-base outline-none focus:border-[#0B5966]"
+                    style={{ color: '#1A2E2E' }}/>
+                </div>
               </div>
 
-              {/* Posología */}
-              <div>
-                <label className="block text-base font-semibold text-gray-700 mb-2">Instrucción de toma</label>
-                <input type="text" value={form.posologia}
-                  onChange={e => setForm(prev => ({ ...prev, posologia: e.target.value }))}
-                  placeholder="Ej: 1 comprimido, 2 cápsulas..."
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 text-base outline-none focus:border-[#0B5966]"
-                  style={{ color: '#1A2E2E' }}/>
-              </div>
-
-              {/* Horario */}
+              {/* Horario con hora */}
               <div>
                 <label className="block text-base font-semibold text-gray-700 mb-3">Horario de toma</label>
-                <div className="flex gap-3">
+                <div className="space-y-2">
                   {MOMENTOS.map(m => {
                     const activo = form.momento.includes(m.value)
+                    const horaKey = m.horaKey as keyof FormRemedio
                     return (
-                      <button key={m.value} onClick={() => toggleMomento(m.value)}
-                        className="flex-1 py-4 rounded-xl text-base font-bold transition-colors"
-                        style={activo
-                          ? { background: '#0B5966', color: '#FFFFFF' }
-                          : { background: '#F3F4F6', color: '#4B5563' }}>
-                        {m.emoji}<br/>{m.label}
-                      </button>
+                      <div key={m.value} className="flex items-center gap-3">
+                        <button onClick={() => toggleMomento(m.value)}
+                          className="flex-1 py-3.5 rounded-xl text-base font-bold transition-colors flex items-center justify-center gap-2"
+                          style={activo
+                            ? { background: '#0B5966', color: '#FFFFFF' }
+                            : { background: '#F3F4F6', color: '#6B7280' }}>
+                          {m.emoji} {m.label}
+                        </button>
+                        {activo && (
+                          <input type="time" value={form[horaKey] as string}
+                            onChange={e => setForm(prev => ({ ...prev, [horaKey]: e.target.value }))}
+                            className="px-3 py-3 rounded-xl border-2 border-gray-200 text-base font-bold outline-none focus:border-[#0B5966] w-28"
+                            style={{ color: '#1A2E2E' }}/>
+                        )}
+                      </div>
                     )
                   })}
                 </div>
@@ -416,12 +532,12 @@ export default function PlanPage() {
                   <span className="text-base text-gray-700 font-medium">Todos los días</span>
                 </label>
                 {!form.todosLosDias && (
-                  <div className="flex gap-2">
+                  <div className="flex gap-1.5">
                     {DIAS.map(d => {
                       const activo = form.diasSemana.includes(d.value)
                       return (
                         <button key={d.value} onClick={() => toggleDia(d.value)}
-                          className="flex-1 py-3 rounded-xl text-sm font-bold transition-colors"
+                          className="flex-1 py-3 rounded-xl text-sm font-bold"
                           style={activo
                             ? { background: '#0B5966', color: '#FFFFFF' }
                             : { background: '#F3F4F6', color: '#6B7280' }}>
@@ -438,14 +554,14 @@ export default function PlanPage() {
                 <label className="block text-base font-semibold text-gray-700 mb-3">Duración</label>
                 <div className="flex gap-3 mb-3">
                   <button onClick={() => setForm(prev => ({ ...prev, cronico: true }))}
-                    className="flex-1 py-3 rounded-xl text-base font-bold transition-colors"
+                    className="flex-1 py-3.5 rounded-xl text-base font-bold"
                     style={form.cronico
                       ? { background: '#0B5966', color: '#FFFFFF' }
                       : { background: '#F3F4F6', color: '#6B7280' }}>
                     ♾ Crónico
                   </button>
                   <button onClick={() => setForm(prev => ({ ...prev, cronico: false }))}
-                    className="flex-1 py-3 rounded-xl text-base font-bold transition-colors"
+                    className="flex-1 py-3.5 rounded-xl text-base font-bold"
                     style={!form.cronico
                       ? { background: '#EF9F27', color: '#FFFFFF' }
                       : { background: '#F3F4F6', color: '#6B7280' }}>
@@ -459,7 +575,7 @@ export default function PlanPage() {
                       placeholder="30" min={1} max={365}
                       className="w-28 px-4 py-3 rounded-xl border-2 border-gray-200 text-base outline-none focus:border-[#0B5966] text-center font-bold"
                       style={{ color: '#1A2E2E' }}/>
-                    <span className="text-base text-gray-600">días</span>
+                    <span className="text-base text-gray-600">días de tratamiento</span>
                   </div>
                 )}
               </div>

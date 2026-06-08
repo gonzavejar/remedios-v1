@@ -1,5 +1,10 @@
-// lib/auth.ts
+// lib/auth.ts — versión semana 10
+// Correcciones: obtenerPlanToma incluye todos los campos necesarios.
+// Agrega: agregarRemedioConPosologia actualizado, generarICS para calendario.
+
 import { supabase } from './supabase'
+
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export interface UsuarioActual {
   id: string
@@ -23,7 +28,8 @@ export interface Credenciales {
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export async function obtenerUsuario(): Promise<UsuarioActual | null> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user
   if (!user) return null
   return {
     id: user.id,
@@ -34,9 +40,10 @@ export async function obtenerUsuario(): Promise<UsuarioActual | null> {
 }
 
 export async function registrarConEmail(email: string, password: string) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL
   return supabase.auth.signUp({
     email, password,
-    options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback` },
+    options: { emailRedirectTo: `${origin}/` },
   })
 }
 
@@ -45,9 +52,10 @@ export async function iniciarSesionEmail(email: string, password: string) {
 }
 
 export async function iniciarSesionGoogle() {
+  const origin = typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL
   return supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback` },
+    options: { redirectTo: `${origin}/` },
   })
 }
 
@@ -68,37 +76,27 @@ export async function obtenerCredenciales(usuarioId: string): Promise<Credencial
 
 export async function guardarCredenciales(usuarioId: string, creds: Partial<Credenciales>) {
   return supabase.from('perfil_credencial').upsert({
-    usuario_id: usuarioId,
-    ...creds,
-    updated_at: new Date().toISOString(),
+    usuario_id: usuarioId, ...creds, updated_at: new Date().toISOString(),
   })
 }
 
-// Genera hints personalizados según las credenciales del usuario
 export function generarHints(creds: Credenciales): string[] {
   const hints: string[] = []
-  if (creds.prevision?.startsWith('fonasa')) {
-    hints.push('Tienes Fonasa: verifica el precio preferente antes de pagar.')
-  }
-  if (creds.prevision === 'isapre' && creds.isapre_nombre) {
-    hints.push(`Tu Isapre ${creds.isapre_nombre} podría tener convenio con alguna cadena — consulta antes de comprar.`)
-  }
+  if (creds.prevision?.startsWith('fonasa'))   hints.push('Tienes Fonasa: verifica el precio preferente antes de pagar.')
+  if (creds.prevision === 'isapre' && creds.isapre_nombre)
+    hints.push(`Tu Isapre ${creds.isapre_nombre} podría tener convenio con alguna cadena.`)
   if (creds.caja_nombre) {
     const cajas: Record<string, string> = {
-      los_andes: 'Caja Los Andes',
-      los_heroes: 'Caja Los Héroes',
-      '18_septiembre': 'Caja 18 de Septiembre',
-      araucana: 'La Araucana',
-      serviestado: 'ServiEstado',
+      los_andes: 'Caja Los Andes', los_heroes: 'Caja Los Héroes',
+      '18_septiembre': 'Caja 18 de Septiembre', araucana: 'La Araucana', serviestado: 'ServiEstado',
     }
-    const nombre = cajas[creds.caja_nombre] ?? 'tu Caja de Compensación'
-    hints.push(`${nombre} tiene convenio con farmacias — muestra tu credencial en caja.`)
+    hints.push(`${cajas[creds.caja_nombre] ?? 'Tu Caja'} tiene convenio con farmacias — muestra tu credencial.`)
   }
-  if (creds.club_cruz_verde)  hints.push('Tu Club Cruz Verde puede darte descuento en esa cadena.')
-  if (creds.club_ahumada)     hints.push('Tu Club Ahumada puede darte descuento en esa cadena.')
-  if (creds.club_salcobrand)  hints.push('Tu Club Salcobrand puede darte descuento adicional.')
-  if (creds.club_dr_simi)     hints.push('Tu Club Dr. Simi puede aplicar descuento en esa farmacia.')
-  if (creds.tiene_seguro_comp) hints.push('Con tu seguro complementario podrías reembolsar parte del valor — guarda la boleta.')
+  if (creds.club_cruz_verde)   hints.push('Tu Club Cruz Verde puede darte descuento.')
+  if (creds.club_ahumada)      hints.push('Tu Club Ahumada puede darte descuento.')
+  if (creds.club_salcobrand)   hints.push('Tu Club Salcobrand puede darte descuento.')
+  if (creds.club_dr_simi)      hints.push('Tu Club Dr. Simi puede darte descuento.')
+  if (creds.tiene_seguro_comp) hints.push('Con tu seguro complementario podrías reembolsar parte — guarda la boleta.')
   return hints
 }
 
@@ -120,6 +118,56 @@ export async function obtenerMisRemedios(usuarioId: string) {
     .select('id, producto_id, notas, created_at, producto (nombre_comercial, dosis_forma)')
     .eq('usuario_id', usuarioId).eq('activo', true)
     .order('created_at', { ascending: false })
+  return data ?? []
+}
+
+// ─── Plan de toma ─────────────────────────────────────────────────────────────
+
+export async function agregarRemedioConPosologia(params: {
+  usuarioId: string
+  productoId: number | null
+  nombreManual?: string
+  dosisTexto: string
+  posologia: string
+  momentoToma: string[]
+  permanente: boolean
+}) {
+  return supabase.from('usuario_remedio').upsert({
+    usuario_id:   params.usuarioId,
+    producto_id:  params.productoId,
+    dosis_texto:  params.dosisTexto,
+    posologia:    params.posologia,
+    momento_toma: params.momentoToma,
+    permanente:   params.permanente,
+    activo:       true,
+    notas:        params.productoId ? null : params.nombreManual,
+  }, { onConflict: 'usuario_id,producto_id' })
+}
+
+/** Obtiene TODOS los campos del plan de toma — versión corregida */
+export async function obtenerPlanToma(usuarioId: string) {
+  const { data, error } = await supabase
+    .from('usuario_remedio')
+    .select(`
+      id,
+      producto_id,
+      dosis_texto,
+      posologia,
+      momento_toma,
+      dias_semana,
+      duracion_dias,
+      permanente,
+      hora_manana,
+      hora_mediodia,
+      hora_noche,
+      notas,
+      producto (nombre_comercial, dosis_forma)
+    `)
+    .eq('usuario_id', usuarioId)
+    .eq('activo', true)
+    .order('created_at', { ascending: true })
+
+  if (error) console.error('Error obtenerPlanToma:', error.message)
   return data ?? []
 }
 
@@ -150,65 +198,120 @@ export async function registrarPrecio(params: {
   fechaCompra: string
   farmaciaNombre: string
   farmaciaComuna: string
-  fotoBoleta?: File | null   // foto opcional
+  fotoBoleta?: File | null
   canal: string
   tipoDescuento: string
   credencialUsada: string
 }) {
-  // Subir foto solo si existe
   let fotoUrl: string | null = null
   if (params.fotoBoleta) {
     fotoUrl = await subirFotoBoleta(params.usuarioId, params.fotoBoleta)
     if (!fotoUrl) return { error: 'No se pudo subir la foto de boleta' }
   }
-
   const { error } = await supabase.from('precio_usuario').insert({
-    usuario_id:      params.usuarioId,
-    producto_id:     params.productoId,
-    valor_clp:       params.valorClp,
-    fecha_compra:    params.fechaCompra,
-    farmacia_nombre: params.farmaciaNombre,
-    farmacia_comuna: params.farmaciaComuna,
-    foto_boleta_url: fotoUrl,
-    canal:           params.canal,
-    tipo_descuento:  params.tipoDescuento,
+    usuario_id:       params.usuarioId,
+    producto_id:      params.productoId,
+    valor_clp:        params.valorClp,
+    fecha_compra:     params.fechaCompra,
+    farmacia_nombre:  params.farmaciaNombre,
+    farmacia_comuna:  params.farmaciaComuna,
+    foto_boleta_url:  fotoUrl,
+    canal:            params.canal,
+    tipo_descuento:   params.tipoDescuento,
     credencial_usada: params.credencialUsada || null,
   })
-
   if (error) return { error: error.message }
   return { ok: true }
 }
 
-// ─── Plan de toma / posología ─────────────────────────────────────────────────
+// ─── Generador de calendario .ics ─────────────────────────────────────────────
 
-/** Agrega un remedio con posología a la lista del usuario */
-export async function agregarRemedioConPosologia(params: {
-  usuarioId: string
-  productoId: number | null
-  nombreManual?: string
-  dosisTexto: string
+interface RemedioICS {
+  nombre: string
+  dosis: string
   posologia: string
-  momentoToma: string[]
-  permanente: boolean
-}) {
-  return supabase.from('usuario_remedio').upsert({
-    usuario_id:   params.usuarioId,
-    producto_id:  params.productoId,
-    dosis_texto:  params.dosisTexto,
-    posologia:    params.posologia,
-    momento_toma: params.momentoToma,
-    permanente:   params.permanente,
-    activo:       true,
-    notas:        params.productoId ? null : params.nombreManual,
-  }, { onConflict: 'usuario_id,producto_id' })
+  momento_toma: string[]
+  hora_manana?: string | null
+  hora_mediodia?: string | null
+  hora_noche?: string | null
 }
 
-/** Obtiene el plan de toma del usuario organizado por momento del día */
-export async function obtenerPlanToma(usuarioId: string) {
-  const { data } = await supabase
-    .from('usuario_remedio')
-    .select('id, producto_id, dosis_texto, posologia, momento_toma, notas, producto (nombre_comercial, dosis_forma)')
-    .eq('usuario_id', usuarioId)
-    .eq('activo', true)
-  return data ?? []
+/**
+ * Genera un archivo .ics con recordatorios recurrentes para los remedios.
+ * El usuario lo importa a su calendario (Google Calendar, Apple Calendar, etc.)
+ */
+export function generarICS(remedios: RemedioICS[]): string {
+  const hoy = new Date()
+  const pad = (n: number) => n.toString().padStart(2, '0')
+
+  function fechaICS(date: Date, hora: string) {
+    const [h, m] = hora.split(':').map(Number)
+    const d = new Date(date)
+    d.setHours(h, m, 0, 0)
+    return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`
+  }
+
+  const horasDefecto: Record<string, string> = {
+    'mañana':   '08:00',
+    'mediodia': '13:00',
+    'noche':    '21:00',
+  }
+
+  let eventos = ''
+  let uid = 1
+
+  for (const r of remedios) {
+    for (const momento of (r.momento_toma ?? [])) {
+      const horaMap: Record<string, string | null | undefined> = {
+        'mañana':   r.hora_manana,
+        'mediodia': r.hora_mediodia,
+        'noche':    r.hora_noche,
+      }
+      const hora = horaMap[momento] ?? horasDefecto[momento] ?? '08:00'
+      const dtstart = fechaICS(hoy, hora)
+      const dtend   = fechaICS(hoy, hora.replace(/(\d+):(\d+)/, (_, h, m) =>
+        `${pad(parseInt(h))}:${pad((parseInt(m)+5) % 60)}`
+      ))
+
+      const momentoLabel = momento === 'mañana' ? 'En la mañana'
+        : momento === 'mediodia' ? 'Al mediodía' : 'En la noche'
+
+      eventos += `BEGIN:VEVENT
+UID:remedios-${uid++}-${Date.now()}@remedios-v1
+DTSTART:${dtstart}
+DTEND:${dtend}
+RRULE:FREQ=DAILY
+SUMMARY:💊 ${r.nombre}${r.dosis ? ` ${r.dosis}` : ''} — ${momentoLabel}
+DESCRIPTION:${r.posologia ?? '1 dosis'}
+BEGIN:VALARM
+TRIGGER:-PT5M
+ACTION:DISPLAY
+DESCRIPTION:Recordatorio: ${r.nombre}
+END:VALARM
+END:VEVENT
+`
+    }
+  }
+
+  return `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Remedios Chile//Plan de Toma//ES
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Mi plan de remedios
+X-WR-TIMEZONE:America/Santiago
+${eventos}END:VCALENDAR`
+}
+
+/** Descarga el archivo .ics en el navegador */
+export function descargarICS(contenido: string, nombreArchivo = 'mis-remedios.ics') {
+  const blob = new Blob([contenido], { type: 'text/calendar;charset=utf-8' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href = url
+  a.download = nombreArchivo
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
