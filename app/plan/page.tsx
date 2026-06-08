@@ -129,6 +129,9 @@ export default function PlanPage() {
       horaManana: r.hora_manana ?? '08:00',
       horaMediodia: r.hora_mediodia ?? '13:00',
       horaNoche: r.hora_noche ?? '21:00',
+      alarma_mañana: false,
+      alarma_mediodia: false,
+      alarma_noche: false,
     })
     setBusqueda(r.producto?.nombre_comercial ?? r.notas ?? '')
     setSugerencias([]); setError(null); setMostrarForm(true)
