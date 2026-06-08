@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { obtenerUsuario, obtenerPlanToma, generarICS, descargarICS } from '../../lib/auth'
+import { usePWA } from '../../lib/usePWA'
 import { supabase } from '../../lib/supabase'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -79,6 +80,7 @@ export default function PlanPage() {
   const [sugerencias, setSugerencias] = useState<any[]>([])
   const [exportando, setExportando] = useState(false)
   const [notifOk, setNotifOk]       = useState(false)
+  const { puedeInstalar, notifActivas, instalarApp, activarNotificaciones, programarAlarmas } = usePWA()
 
   useEffect(() => {
     obtenerUsuario().then(u => {
@@ -197,9 +199,9 @@ export default function PlanPage() {
     setExportando(true)
     try {
       const datos = remedios.map(r => ({
-        nombre:      r.producto?.nombre_comercial ?? r.notas ?? 'Remedio',
-        dosis:       r.dosis_texto ?? '',
-        posologia:   r.posologia ?? '1 dosis',
+        nombre:       r.producto?.nombre_comercial ?? r.notas ?? 'Remedio',
+        dosis:        r.dosis_texto ?? '',
+        posologia:    r.posologia ?? '1 dosis',
         momento_toma: r.momento_toma ?? [],
         hora_manana:   r.hora_manana,
         hora_mediodia: r.hora_mediodia,
@@ -212,50 +214,15 @@ export default function PlanPage() {
     }
   }
 
-  // ── Notificaciones del navegador ───────────────────────────────────────────
+  // ── Notificaciones via Service Worker ─────────────────────────────────────
   async function handleActivarNotificaciones() {
-    if (!('Notification' in window)) {
-      alert('Tu navegador no soporta notificaciones.')
-      return
-    }
-    const permiso = await Notification.requestPermission()
-    if (permiso === 'granted') {
+    const ok = await activarNotificaciones()
+    if (ok) {
       setNotifOk(true)
-      // Programar notificaciones para hoy
-      programarNotificaciones()
+      await programarAlarmas(remedios)
     } else {
       alert('No se pudo activar las notificaciones. Verifica los permisos del navegador.')
     }
-  }
-
-  function programarNotificaciones() {
-    const ahora = new Date()
-    remedios.forEach(r => {
-      const nombre = r.producto?.nombre_comercial ?? r.notas ?? 'Remedio'
-      const horarios: Record<string, string | null> = {
-        'mañana':   r.hora_manana,
-        'mediodia': r.hora_mediodia,
-        'noche':    r.hora_noche,
-      }
-      const horas_defecto: Record<string, string> = {
-        'mañana': '08:00', 'mediodia': '13:00', 'noche': '21:00'
-      };
-      (r.momento_toma ?? []).forEach(momento => {
-        const hora = horarios[momento] ?? horas_defecto[momento]
-        const [h, m] = hora.split(':').map(Number)
-        const objetivo = new Date()
-        objetivo.setHours(h, m, 0, 0)
-        const diff = objetivo.getTime() - ahora.getTime()
-        if (diff > 0) {
-          setTimeout(() => {
-            new Notification(`💊 ${nombre}`, {
-              body: `${r.dosis_texto ?? ''} — ${r.posologia ?? '1 dosis'}`,
-              icon: '/favicon.ico',
-            })
-          }, diff)
-        }
-      })
-    })
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -349,16 +316,23 @@ export default function PlanPage() {
               <button onClick={handleExportarCalendario} disabled={exportando}
                 className="flex-1 py-3.5 rounded-xl text-sm font-semibold border-2 flex items-center justify-center gap-2"
                 style={{ borderColor: '#0B5966', color: '#0B5966', background: 'white' }}>
-                📅 Agregar al calendario
+                📅 Al calendario
               </button>
               <button onClick={handleActivarNotificaciones}
                 className="flex-1 py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 text-white"
-                style={{ background: notifOk ? '#1D9E75' : '#0B5966' }}>
-                {notifOk ? '✓ Activado' : '🔔 Notificaciones'}
+                style={{ background: (notifOk || notifActivas) ? '#1D9E75' : '#0B5966' }}>
+                {(notifOk || notifActivas) ? '✓ Alarmas activas' : '🔔 Activar alarmas'}
               </button>
             </div>
-            <p className="text-xs text-gray-400 mt-2 text-center">
-              El calendario crea alarmas recurrentes en Google Calendar o Apple Calendar
+            {puedeInstalar && (
+              <button onClick={instalarApp}
+                className="w-full py-3.5 rounded-xl text-white text-sm font-bold flex items-center justify-center gap-2"
+                style={{ background: '#1D9E75' }}>
+                📲 Instalar app en este teléfono
+              </button>
+            )}
+            <p className="text-xs text-gray-400 mt-1 text-center">
+              Las alarmas funcionan aunque la app esté cerrada
             </p>
           </div>
         )}

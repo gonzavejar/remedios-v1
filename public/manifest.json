@@ -1,0 +1,46 @@
+{
+  "name": "Mis Remedios Chile",
+  "short_name": "Remedios",
+  "description": "Consulta precios, beneficios y plan de toma de tus medicamentos",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#EFF4F0",
+  "theme_color": "#0B5966",
+  "orientation": "portrait",
+  "lang": "es-CL",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "categories": ["health", "medical"],
+  "shortcuts": [
+    {
+      "name": "Mi plan",
+      "url": "/plan",
+      "description": "Ver plan de toma de hoy"
+    },
+    {
+      "name": "Buscar remedio",
+      "url": "/",
+      "description": "Consultar precio de un remedio"
+    }
+  ]
+}
