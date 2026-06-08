@@ -1,20 +1,18 @@
 'use client'
-// app/registrar/page.tsx — versión 2
-// Flujo: 1) Foto → 2) OCR automático → 3) Revisar items + descuentos → 4) Guardar
+// app/registrar/page.tsx — versión 3
+// Flujo: foto (OCR) o entrada manual.
+// Precios manuales se marcan como tipo_registro='manual' para análisis posterior.
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { obtenerUsuario, obtenerCredenciales, subirFotoBoleta } from '../../lib/auth'
 import { supabase } from '../../lib/supabase'
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
-
 interface ProductoBoleta {
   nombre_boleta: string
   nombre_generico: string
   precio_unitario: number
   cantidad: number
-  // campos que el usuario completa/confirma
   producto_id: number | null
   nombre_confirmado: string
   tipo_descuento: string
@@ -25,27 +23,33 @@ interface ProductoBoleta {
 interface DatosBoleta {
   farmacia: string
   comuna: string | null
-  fecha: string | null
+  fecha: string
   productos: ProductoBoleta[]
-  descuento_detectado: boolean
-  tipo_descuento_detectado: string
 }
 
-type Paso = 'foto' | 'procesando' | 'revision' | 'enviando' | 'listo'
+type Modo  = 'inicio' | 'foto' | 'manual'
+type Paso  = 'inicio' | 'procesando' | 'revision' | 'enviando' | 'listo'
+
+const PROD_VACIO: ProductoBoleta = {
+  nombre_boleta: '', nombre_generico: '', precio_unitario: 0, cantidad: 1,
+  producto_id: null, nombre_confirmado: '', tipo_descuento: 'ninguno',
+  credencial_usada: '', incluir: true,
+}
 
 function RegistrarContent() {
-  const router     = useRouter()
-  const params     = useSearchParams()
-  const productoId = parseInt(params.get('producto') ?? '0')
-  const fileRef    = useRef<HTMLInputElement>(null)
+  const router       = useRouter()
+  const params       = useSearchParams()
+  const productoId   = parseInt(params.get('producto') ?? '0')
+  const fileRef      = useRef<HTMLInputElement>(null)
 
-  const [paso, setPaso]         = useState<Paso>('foto')
-  const [usuario, setUsuario]   = useState<any>(null)
-  const [creds, setCreds]       = useState<any>(null)
-  const [foto, setFoto]         = useState<File | null>(null)
-  const [preview, setPreview]   = useState<string | null>(null)
-  const [datos, setDatos]       = useState<DatosBoleta | null>(null)
-  const [error, setError]       = useState<string | null>(null)
+  const [paso, setPaso]             = useState<Paso>('inicio')
+  const [modo, setModo]             = useState<Modo>('inicio')
+  const [usuario, setUsuario]       = useState<any>(null)
+  const [creds, setCreds]           = useState<any>(null)
+  const [foto, setFoto]             = useState<File | null>(null)
+  const [preview, setPreview]       = useState<string | null>(null)
+  const [datos, setDatos]           = useState<DatosBoleta | null>(null)
+  const [error, setError]           = useState<string | null>(null)
   const [nombreProductoInicial, setNombreProductoInicial] = useState('')
 
   useEffect(() => {
@@ -55,15 +59,11 @@ function RegistrarContent() {
       obtenerCredenciales(u.id).then(setCreds)
     })
     if (productoId) {
-      supabase.from('producto').select('nombre_comercial, principios:producto_principio(principio_activo(nombre))')
-        .eq('id', productoId).single()
-        .then(({ data }) => {
-          if (data) setNombreProductoInicial(data.nombre_comercial)
-        })
+      supabase.from('producto').select('nombre_comercial').eq('id', productoId).single()
+        .then(({ data }) => { if (data) setNombreProductoInicial(data.nombre_comercial) })
     }
   }, [productoId, router])
 
-  // Opciones de descuento según credenciales
   function opcionesDescuento(): { value: string; label: string }[] {
     const opts = [{ value: 'ninguno', label: 'Sin descuento (precio lista)' }]
     if (creds?.prevision?.startsWith('fonasa')) opts.push({ value: 'fonasa', label: 'Fonasa precio preferente' })
@@ -73,28 +73,22 @@ function RegistrarContent() {
     if (creds?.club_ahumada)                    opts.push({ value: 'club',   label: 'Club Ahumada' })
     if (creds?.club_salcobrand)                 opts.push({ value: 'club',   label: 'Club Salcobrand' })
     if (creds?.club_dr_simi)                    opts.push({ value: 'club',   label: 'Club Dr. Simi' })
-    if (creds?.tiene_seguro_comp)               opts.push({ value: 'isapre', label: `Seguro ${creds.seguro_comp_nombre ?? 'complementario'}` })
+    if (creds?.tiene_seguro_comp)               opts.push({ value: 'isapre', label: `Seguro ${creds.seguro_comp_nombre ?? ''}` })
     opts.push({ value: 'otro', label: 'Otro descuento' })
     return opts
   }
 
-  // ── Paso 1: seleccionar foto ──────────────────────────────────────────────
-
+  // ── Modo foto: OCR ────────────────────────────────────────────────────────
   async function handleFoto(e: React.ChangeEvent<HTMLInputElement>) {
     const archivo = e.target.files?.[0]
     if (!archivo) return
     setFoto(archivo)
     setPreview(URL.createObjectURL(archivo))
     setError(null)
-    await procesarOCR(archivo)
-  }
-
-  // ── Paso 2: OCR ───────────────────────────────────────────────────────────
-
-  async function procesarOCR(archivo: File) {
     setPaso('procesando')
+    setModo('foto')
+
     try {
-      // Comprimir imagen antes de enviar
       const base64 = await archivoABase64(archivo)
       const res = await fetch('/api/ocr', {
         method: 'POST',
@@ -104,78 +98,59 @@ function RegistrarContent() {
       const json = await res.json()
 
       if (json.ok && json.datos) {
-        const d = json.datos as any
-
-        // Si venimos con un producto específico y no hay productos en boleta
+        const d = json.datos
         let productos: ProductoBoleta[] = (d.productos ?? []).map((p: any) => ({
-          nombre_boleta:    p.nombre_boleta ?? '',
-          nombre_generico:  p.nombre_generico ?? '',
-          precio_unitario:  p.precio_unitario ?? 0,
-          cantidad:         p.cantidad ?? 1,
-          producto_id:      null,
+          nombre_boleta:     p.nombre_boleta ?? '',
+          nombre_generico:   p.nombre_generico ?? '',
+          precio_unitario:   p.precio_unitario ?? 0,
+          cantidad:          p.cantidad ?? 1,
+          producto_id:       null,
           nombre_confirmado: p.nombre_generico ?? p.nombre_boleta ?? '',
-          tipo_descuento:   d.tipo_descuento_detectado === 'club' ? 'club' :
-                            d.tipo_descuento_detectado === 'convenio' ? 'caja' : 'ninguno',
-          credencial_usada: '',
-          incluir:          true,
+          tipo_descuento:    d.tipo_descuento_detectado === 'club' ? 'club' : 'ninguno',
+          credencial_usada:  '',
+          incluir:           true,
         }))
-
-        // Si venimos con producto específico y no se detectó, agregar uno manual
         if (productoId && productos.length === 0) {
-          productos = [{
-            nombre_boleta: nombreProductoInicial,
-            nombre_generico: nombreProductoInicial,
-            precio_unitario: 0,
-            cantidad: 1,
-            producto_id: productoId,
-            nombre_confirmado: nombreProductoInicial,
-            tipo_descuento: 'ninguno',
-            credencial_usada: '',
-            incluir: true,
-          }]
+          productos = [{ ...PROD_VACIO, producto_id: productoId, nombre_confirmado: nombreProductoInicial, nombre_boleta: nombreProductoInicial }]
         }
-
-        setDatos({
-          farmacia: d.farmacia ?? '',
-          comuna:   d.comuna ?? null,
-          fecha:    d.fecha ?? new Date().toISOString().split('T')[0],
-          productos,
-          descuento_detectado:       d.descuento_detectado ?? false,
-          tipo_descuento_detectado:  d.tipo_descuento_detectado ?? 'ninguno',
-        })
-        setPaso('revision')
+        setDatos({ farmacia: d.farmacia ?? '', comuna: d.comuna ?? null, fecha: d.fecha ?? new Date().toISOString().split('T')[0], productos })
       } else {
-        // OCR falló — modo manual con producto si viene uno
-        setDatos({
-          farmacia: '', comuna: null,
-          fecha: new Date().toISOString().split('T')[0],
-          productos: productoId ? [{
-            nombre_boleta: nombreProductoInicial, nombre_generico: nombreProductoInicial,
-            precio_unitario: 0, cantidad: 1, producto_id: productoId,
-            nombre_confirmado: nombreProductoInicial, tipo_descuento: 'ninguno',
-            credencial_usada: '', incluir: true,
-          }] : [],
-          descuento_detectado: false, tipo_descuento_detectado: 'ninguno',
-        })
         setError(json.error ?? 'No se pudo leer la boleta. Completa los datos manualmente.')
-        setPaso('revision')
+        iniciarManual()
+        return
       }
+      setPaso('revision')
     } catch {
       setError('Error al procesar la imagen.')
-      setPaso('foto')
+      setPaso('inicio')
     }
+  }
+
+  // ── Modo manual ───────────────────────────────────────────────────────────
+  function iniciarManual() {
+    setModo('manual')
+    setFoto(null)
+    setPreview(null)
+    setDatos({
+      farmacia: '',
+      comuna: null,
+      fecha: new Date().toISOString().split('T')[0],
+      productos: productoId
+        ? [{ ...PROD_VACIO, producto_id: productoId, nombre_confirmado: nombreProductoInicial, nombre_boleta: nombreProductoInicial }]
+        : [{ ...PROD_VACIO }],
+    })
+    setError(null)
+    setPaso('revision')
   }
 
   function archivoABase64(file: File): Promise<string> {
     return new Promise((res, rej) => {
-      const reader = new FileReader()
-      reader.onload  = () => res(reader.result as string)
-      reader.onerror = () => rej(new Error('Error leyendo archivo'))
-      reader.readAsDataURL(file)
+      const r = new FileReader()
+      r.onload = () => res(r.result as string)
+      r.onerror = () => rej(new Error('error'))
+      r.readAsDataURL(file)
     })
   }
-
-  // ── Paso 3: actualizar un producto en la lista ────────────────────────────
 
   function actualizarProducto(idx: number, campo: string, valor: any) {
     setDatos(prev => {
@@ -186,47 +161,39 @@ function RegistrarContent() {
     })
   }
 
-  function agregarProductoManual() {
-    setDatos(prev => {
-      if (!prev) return prev
-      return {
-        ...prev,
-        productos: [...prev.productos, {
-          nombre_boleta: '', nombre_generico: '', precio_unitario: 0,
-          cantidad: 1, producto_id: null, nombre_confirmado: '',
-          tipo_descuento: 'ninguno', credencial_usada: '', incluir: true,
-        }]
-      }
-    })
+  function agregarProducto() {
+    setDatos(prev => prev ? { ...prev, productos: [...prev.productos, { ...PROD_VACIO }] } : prev)
   }
 
-  // ── Paso 4: guardar ───────────────────────────────────────────────────────
-
+  // ── Guardar ───────────────────────────────────────────────────────────────
   async function handleGuardar() {
-    if (!usuario || !foto || !datos) return
+    if (!usuario || !datos) return
     const incluidos = datos.productos.filter(p => p.incluir && p.precio_unitario > 0)
-    if (incluidos.length === 0) { setError('Selecciona al menos un remedio con precio.'); return }
+    if (incluidos.length === 0) { setError('Ingresa al menos un precio válido.'); return }
 
     setPaso('enviando')
     setError(null)
 
     try {
-      // Subir foto una sola vez
-      const fotoUrl = await subirFotoBoleta(usuario.id, foto)
-      if (!fotoUrl) throw new Error('No se pudo subir la foto')
+      let fotoUrl: string | null = null
+      if (foto) {
+        fotoUrl = await subirFotoBoleta(usuario.id, foto)
+      }
 
-      // Insertar un registro por cada producto incluido
+      const tipoRegistro = foto ? 'foto' : 'manual'
+
       const inserts = incluidos.map(p => ({
         usuario_id:      usuario.id,
         producto_id:     p.producto_id ?? null,
         valor_clp:       p.precio_unitario,
-        fecha_compra:    datos.fecha ?? new Date().toISOString().split('T')[0],
+        fecha_compra:    datos.fecha,
         farmacia_nombre: datos.farmacia,
         farmacia_comuna: datos.comuna ?? '',
         foto_boleta_url: fotoUrl,
         canal:           'lista',
         tipo_descuento:  p.tipo_descuento,
         credencial_usada: p.credencial_usada || null,
+        tipo_registro:   tipoRegistro,
       }))
 
       const { error } = await supabase.from('precio_usuario').insert(inserts)
@@ -235,178 +202,179 @@ function RegistrarContent() {
       setPaso('listo')
       setTimeout(() => router.push('/?registrado=1'), 2000)
     } catch (e: any) {
-      setError(e.message ?? 'Error al guardar. Intenta de nuevo.')
+      setError(e.message ?? 'Error al guardar.')
       setPaso('revision')
     }
   }
 
   if (!usuario) return null
-
   const opts = opcionesDescuento()
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <main className="min-h-screen" style={{ background: '#EFF4F0' }}>
       <div style={{ background: '#0B5966' }} className="px-6 pt-12 pb-8 text-white">
-        <button onClick={() => router.back()} className="flex items-center gap-2 mb-4 opacity-70 hover:opacity-100">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <button onClick={() => paso === 'inicio' ? router.back() : setPaso('inicio')}
+          className="flex items-center gap-2 mb-4 opacity-80">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
           </svg>
-          <span className="text-sm">Volver</span>
+          <span className="text-base">Volver</span>
         </button>
         <h1 className="text-2xl font-bold">Registrar compra</h1>
-        <p className="text-sm mt-1" style={{ color: '#A8D8CE' }}>
-          {paso === 'foto'      && 'Fotografía tu boleta'}
-          {paso === 'procesando'&& 'Leyendo la boleta...'}
-          {paso === 'revision'  && 'Confirma los datos'}
-          {paso === 'enviando'  && 'Guardando...'}
-          {paso === 'listo'     && '¡Listo!'}
+        <p className="text-base mt-1" style={{ color: '#A8D8CE' }}>
+          {paso === 'inicio'     && 'Elige cómo ingresar los datos'}
+          {paso === 'procesando' && 'Leyendo la boleta...'}
+          {paso === 'revision'   && (modo === 'manual' ? 'Ingresa los datos manualmente' : 'Confirma los datos')}
+          {paso === 'enviando'   && 'Guardando...'}
+          {paso === 'listo'      && '¡Registrado!'}
         </p>
       </div>
 
       <div className="max-w-md mx-auto px-4 py-6">
 
-        {/* ── Paso 1: Foto ── */}
-        {paso === 'foto' && (
-          <div>
-            {preview ? (
-              <div className="relative rounded-2xl overflow-hidden border border-gray-200 mb-4">
-                <img src={preview} alt="Boleta" className="w-full max-h-64 object-cover"/>
-              </div>
-            ) : (
+        {/* Inicio: elegir modo */}
+        {paso === 'inicio' && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
               <button onClick={() => fileRef.current?.click()}
-                className="w-full py-12 border-2 border-dashed border-gray-300 rounded-2xl bg-white flex flex-col items-center gap-3 hover:border-[#0B5966] transition-colors mb-4">
-                <svg className="w-12 h-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1}
-                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
-                </svg>
-                <div className="text-center">
-                  <p className="text-gray-600 font-medium">Fotografiar boleta</p>
-                  <p className="text-xs text-gray-400 mt-1">Foto, galería o PDF</p>
-                </div>
+                className="py-8 border-2 border-dashed border-gray-300 rounded-2xl bg-white flex flex-col items-center gap-2">
+                <span className="text-4xl">📷</span>
+                <p className="text-base font-bold text-gray-800">Cámara</p>
+                <p className="text-xs text-gray-500 text-center px-2">Fotografía la boleta</p>
               </button>
-            )}
-            <input ref={fileRef} type="file" accept="image/*,application/pdf"
-              onChange={handleFoto} className="hidden"/>
-            {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+              <button onClick={() => fileRef.current?.click()}
+                className="py-8 border-2 border-dashed border-gray-300 rounded-2xl bg-white flex flex-col items-center gap-2">
+                <span className="text-4xl">📁</span>
+                <p className="text-base font-bold text-gray-800">Archivo</p>
+                <p className="text-xs text-gray-500 text-center px-2">Galería o PDF</p>
+              </button>
+            </div>
+
+            <button onClick={iniciarManual}
+              className="w-full py-6 border-2 border-dashed border-gray-300 rounded-2xl bg-white flex items-center gap-5 px-6">
+              <span className="text-4xl flex-shrink-0">✏️</span>
+              <div className="text-left">
+                <p className="text-lg font-bold text-gray-800">Ingresar sin boleta</p>
+                <p className="text-base text-gray-500">Precio aproximado o recordado</p>
+              </div>
+            </button>
+
+            {/* Aviso precios manuales */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <p className="text-sm text-amber-800">
+                ⚠️ Los precios sin foto de boleta se registran como referenciales y se usan con cautela en el análisis comunitario.
+              </p>
+            </div>
+
+            <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={handleFoto} className="hidden"/>
           </div>
         )}
 
-        {/* ── Paso 2: Procesando ── */}
+        {/* Procesando */}
         {paso === 'procesando' && (
-          <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
-            <div className="w-10 h-10 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-4"
-              style={{ borderColor: '#0B5966', borderTopColor: 'transparent' }}/>
-            <p className="text-gray-700 font-medium">Leyendo la boleta...</p>
-            <p className="text-xs text-gray-400 mt-1">Identificando remedios y precios</p>
+          <div className="bg-white rounded-2xl p-12 text-center shadow-sm">
+            <div className="w-12 h-12 border-t-transparent rounded-full animate-spin mx-auto mb-4"
+              style={{ borderColor: '#0B5966', borderTopColor: 'transparent', borderWidth: 3 }}/>
+            <p className="text-gray-800 font-semibold text-lg">Leyendo la boleta...</p>
           </div>
         )}
 
-        {/* ── Paso 3: Revisión ── */}
+        {/* Revisión */}
         {paso === 'revision' && datos && (
           <div className="space-y-4">
-            {error && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-                <p className="text-sm text-amber-700">{error}</p>
+            {modo === 'manual' && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <p className="text-sm text-amber-800">
+                  ✏️ Modo manual — Este precio quedará marcado como referencial sin boleta.
+                </p>
               </div>
             )}
 
-            {/* Miniatura de la boleta */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
+            {/* Previsualización foto */}
             {preview && (
               <div className="flex items-center gap-3 bg-white rounded-xl p-3 shadow-sm">
                 <img src={preview} alt="Boleta" className="w-14 h-14 object-cover rounded-lg flex-shrink-0"/>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-900 text-sm truncate">
-                    {datos.farmacia || 'Farmacia no detectada'}
-                  </p>
-                  <p className="text-xs text-gray-500">{datos.fecha ?? 'Fecha no detectada'}</p>
+                  <p className="font-medium text-gray-900 text-sm">{datos.farmacia || 'Farmacia'}</p>
+                  <p className="text-xs text-gray-500">{datos.fecha}</p>
                 </div>
-                <button onClick={() => { setFoto(null); setPreview(null); setPaso('foto') }}
-                  className="text-xs text-gray-400 hover:text-gray-600 flex-shrink-0">
-                  Cambiar
-                </button>
+                <button onClick={() => { setFoto(null); setPreview(null); setPaso('inicio') }}
+                  className="text-xs text-gray-400">Cambiar</button>
               </div>
             )}
 
-            {/* Farmacia y fecha editables */}
+            {/* Farmacia y fecha */}
             <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
-              <h3 className="font-semibold text-gray-800 text-sm">Datos de la compra</h3>
+              <h3 className="font-semibold text-gray-800">Datos de la compra</h3>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Farmacia</label>
                   <input type="text" value={datos.farmacia}
                     onChange={e => setDatos(prev => prev ? { ...prev, farmacia: e.target.value } : prev)}
-                    placeholder="Ej: Cruz Verde" className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0B5966]"/>
+                    placeholder="Ej: Cruz Verde"
+                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0B5966]"
+                    style={{ color: '#1A2E2E' }}/>
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Fecha</label>
-                  <input type="date" value={datos.fecha ?? ''}
+                  <input type="date" value={datos.fecha}
                     onChange={e => setDatos(prev => prev ? { ...prev, fecha: e.target.value } : prev)}
                     max={new Date().toISOString().split('T')[0]}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0B5966]"/>
+                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0B5966]"
+                    style={{ color: '#1A2E2E' }}/>
                 </div>
               </div>
             </div>
 
-            {/* Lista de productos */}
+            {/* Productos */}
             <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <h3 className="font-semibold text-gray-800 text-sm mb-3">
-                Remedios detectados ({datos.productos.filter(p => p.incluir).length} seleccionados)
-              </h3>
-
-              {datos.productos.length === 0 && (
-                <p className="text-sm text-gray-400 text-center py-2">
-                  No se detectaron remedios. Agrégalos manualmente.
-                </p>
-              )}
-
+              <h3 className="font-semibold text-gray-800 mb-3">Remedios</h3>
               <div className="space-y-4">
                 {datos.productos.map((p, i) => (
-                  <div key={i} className={`p-3 rounded-xl border transition-colors ${p.incluir ? 'border-[#0B5966]/20 bg-[#0B5966]/3' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
-                    {/* Checkbox + nombre */}
+                  <div key={i} className={`p-3 rounded-xl border ${p.incluir ? 'border-[#0B5966]/20' : 'border-gray-100 opacity-60'}`}>
                     <label className="flex items-start gap-2 cursor-pointer mb-3">
                       <input type="checkbox" checked={p.incluir}
                         onChange={e => actualizarProducto(i, 'incluir', e.target.checked)}
-                        className="mt-1 accent-[#0B5966]"/>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-gray-400 truncate">{p.nombre_boleta}</p>
-                        <input type="text" value={p.nombre_confirmado}
-                          onChange={e => actualizarProducto(i, 'nombre_confirmado', e.target.value)}
-                          placeholder="Nombre del remedio"
-                          className="w-full text-sm font-medium text-gray-900 bg-transparent border-b border-gray-200 outline-none focus:border-[#0B5966] py-0.5"/>
-                      </div>
+                        className="mt-1 w-4 h-4" style={{ accentColor: '#0B5966' }}/>
+                      <input type="text" value={p.nombre_confirmado}
+                        onChange={e => actualizarProducto(i, 'nombre_confirmado', e.target.value)}
+                        placeholder="Nombre del remedio"
+                        className="flex-1 text-base font-medium bg-transparent border-b border-gray-200 outline-none focus:border-[#0B5966]"
+                        style={{ color: '#1A2E2E' }}/>
                     </label>
-
                     {p.incluir && (
-                      <div className="space-y-2">
-                        {/* Precio */}
+                      <div className="space-y-2 pl-6">
                         <div className="flex items-center gap-2">
                           <label className="text-xs text-gray-500 w-16 flex-shrink-0">Precio $</label>
                           <input type="number" value={p.precio_unitario || ''}
                             onChange={e => actualizarProducto(i, 'precio_unitario', parseInt(e.target.value) || 0)}
                             placeholder="0" min={0}
-                            className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm outline-none focus:border-[#0B5966]"/>
+                            className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-[#0B5966]"
+                            style={{ color: '#1A2E2E' }}/>
                         </div>
-
-                        {/* Descuento */}
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">¿Usaste descuento?</label>
-                          <select value={`${p.tipo_descuento}|${p.credencial_usada}`}
-                            onChange={e => {
-                              const [tipo, cred] = e.target.value.split('|')
-                              actualizarProducto(i, 'tipo_descuento', tipo)
-                              actualizarProducto(i, 'credencial_usada', cred === 'undefined' ? '' : cred)
-                            }}
-                            className="w-full px-3 py-1.5 rounded-lg border border-gray-200 text-xs outline-none focus:border-[#0B5966] bg-white">
-                            {opts.map((op, j) => (
-                              <option key={j} value={`${op.value}|${op.label}`}>{op.label}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {p.tipo_descuento === 'ninguno' && (
+                        <select
+                          value={`${p.tipo_descuento}|${p.credencial_usada}`}
+                          onChange={e => {
+                            const [tipo, cred] = e.target.value.split('|')
+                            actualizarProducto(i, 'tipo_descuento', tipo)
+                            actualizarProducto(i, 'credencial_usada', cred === 'undefined' ? '' : cred)
+                          }}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs outline-none bg-white"
+                          style={{ color: '#1A2E2E' }}>
+                          {opts.map((op, j) => (
+                            <option key={j} value={`${op.value}|${op.label}`}>{op.label}</option>
+                          ))}
+                        </select>
+                        {p.tipo_descuento === 'ninguno' && !foto && (
+                          <p className="text-xs text-amber-600">⚠️ Sin foto — precio referencial</p>
+                        )}
+                        {p.tipo_descuento === 'ninguno' && foto && (
                           <p className="text-xs text-emerald-600">✓ Contribuirá al precio comunitario</p>
                         )}
                       </div>
@@ -414,43 +382,40 @@ function RegistrarContent() {
                   </div>
                 ))}
               </div>
-
-              <button onClick={agregarProductoManual}
-                className="mt-3 w-full py-2 rounded-xl border border-dashed border-gray-300 text-xs text-gray-500 hover:border-[#0B5966] hover:text-[#0B5966] transition-colors">
-                + Agregar remedio manualmente
+              <button onClick={agregarProducto}
+                className="mt-3 w-full py-2.5 rounded-xl border border-dashed border-gray-300 text-xs text-gray-500 hover:border-[#0B5966]">
+                + Agregar remedio
               </button>
             </div>
 
-            {error && <p className="text-sm text-red-600 text-center">{error}</p>}
-
             <button onClick={handleGuardar}
               disabled={datos.productos.filter(p => p.incluir && p.precio_unitario > 0).length === 0}
-              className="w-full py-4 rounded-xl text-white font-medium text-sm disabled:opacity-40"
+              className="w-full py-5 rounded-2xl text-white font-bold text-lg disabled:opacity-40"
               style={{ background: '#0B5966' }}>
               Guardar {datos.productos.filter(p => p.incluir && p.precio_unitario > 0).length} remedio(s)
             </button>
           </div>
         )}
 
-        {/* ── Paso 4: Enviando ── */}
+        {/* Enviando */}
         {paso === 'enviando' && (
-          <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+          <div className="bg-white rounded-2xl p-12 text-center shadow-sm">
             <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3"
               style={{ borderColor: '#0B5966', borderTopColor: 'transparent' }}/>
-            <p className="text-gray-500 text-sm">Guardando registros...</p>
+            <p className="text-gray-500 text-sm">Guardando...</p>
           </div>
         )}
 
-        {/* ── Paso 5: Listo ── */}
+        {/* Listo */}
         {paso === 'listo' && (
-          <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
-            <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
+          <div className="bg-white rounded-2xl p-12 text-center shadow-sm">
+            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+              <svg className="w-9 h-9 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
               </svg>
             </div>
-            <p className="text-gray-900 font-semibold">¡Registrado!</p>
-            <p className="text-gray-500 text-sm mt-1">Volviendo a la app...</p>
+            <p className="text-gray-900 font-bold text-xl">¡Registrado!</p>
+            <p className="text-gray-500 text-base mt-1">Volviendo a la app...</p>
           </div>
         )}
       </div>

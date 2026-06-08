@@ -1,8 +1,6 @@
 'use client'
-// app/receta/page.tsx
-// Escanea una receta médica, extrae medicamentos + posología (sin datos personales)
-// y los agrega a Mis remedios con su horario de toma.
-// Diseño accesible: texto grande, alto contraste, botones amplios.
+// app/receta/page.tsx — versión 3
+// Agrega opción de ingresar remedios manualmente sin escanear.
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -16,7 +14,7 @@ interface MedReceta {
   incluir: boolean
 }
 
-type Paso = 'foto' | 'procesando' | 'revision' | 'guardando' | 'listo'
+type Paso = 'inicio' | 'procesando' | 'revision' | 'guardando' | 'listo'
 
 const MOMENTOS = [
   { value: 'mañana',   label: 'Mañana',   emoji: '🌅' },
@@ -24,15 +22,19 @@ const MOMENTOS = [
   { value: 'noche',    label: 'Noche',    emoji: '🌙' },
 ]
 
+const MED_VACIA: MedReceta = {
+  nombre: '', dosis: '', posologia: '', momento: [], incluir: true
+}
+
 export default function RecetaPage() {
-  const router = useRouter()
+  const router  = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
-  const [usuario, setUsuario] = useState<any>(null)
-  const [paso, setPaso]       = useState<Paso>('foto')
-  const [preview, setPreview] = useState<string | null>(null)
-  const [meds, setMeds]       = useState<MedReceta[]>([])
+  const [usuario, setUsuario]       = useState<any>(null)
+  const [paso, setPaso]             = useState<Paso>('inicio')
+  const [preview, setPreview]       = useState<string | null>(null)
+  const [meds, setMeds]             = useState<MedReceta[]>([MED_VACIA])
   const [permanente, setPermanente] = useState(false)
-  const [error, setError]     = useState<string | null>(null)
+  const [error, setError]           = useState<string | null>(null)
 
   useEffect(() => {
     obtenerUsuario().then(u => {
@@ -41,6 +43,15 @@ export default function RecetaPage() {
     })
   }, [router])
 
+  // ── Modo manual: ir directo a revisión ───────────────────────────────────
+  function iniciarManual() {
+    setMeds([MED_VACIA])
+    setPreview(null)
+    setError(null)
+    setPaso('revision')
+  }
+
+  // ── Modo foto: OCR ────────────────────────────────────────────────────────
   async function handleFoto(e: React.ChangeEvent<HTMLInputElement>) {
     const archivo = e.target.files?.[0]
     if (!archivo) return
@@ -57,30 +68,31 @@ export default function RecetaPage() {
       })
       const json = await res.json()
 
-      if (json.ok && json.datos?.medicamentos) {
+      if (json.ok && json.datos?.medicamentos?.length > 0) {
         setMeds(json.datos.medicamentos.map((m: any) => ({
-          nombre: m.nombre ?? '',
-          dosis: m.dosis ?? '',
+          nombre:   m.nombre ?? '',
+          dosis:    m.dosis ?? '',
           posologia: m.posologia ?? '',
-          momento: Array.isArray(m.momento) ? m.momento : ['mañana'],
-          incluir: true,
+          momento:  Array.isArray(m.momento) ? m.momento : ['mañana'],
+          incluir:  true,
         })))
         setPermanente(json.datos.permanente ?? false)
-        setPaso('revision')
       } else {
-        setError(json.error ?? 'No se pudo leer la receta.')
-        setPaso('foto')
+        setError('No se pudo leer la receta. Puedes completar los datos manualmente.')
+        setMeds([MED_VACIA])
       }
+      setPaso('revision')
     } catch {
       setError('Error al procesar la imagen.')
-      setPaso('foto')
+      setMeds([MED_VACIA])
+      setPaso('revision')
     }
   }
 
   function archivoABase64(file: File): Promise<string> {
     return new Promise((res, rej) => {
       const r = new FileReader()
-      r.onload = () => res(r.result as string)
+      r.onload  = () => res(r.result as string)
       r.onerror = () => rej(new Error('error'))
       r.readAsDataURL(file)
     })
@@ -88,35 +100,40 @@ export default function RecetaPage() {
 
   function actualizar(idx: number, campo: string, valor: any) {
     setMeds(prev => {
-      const copia = [...prev]
-      copia[idx] = { ...copia[idx], [campo]: valor }
-      return copia
+      const c = [...prev]; c[idx] = { ...c[idx], [campo]: valor }; return c
     })
   }
 
   function toggleMomento(idx: number, momento: string) {
     setMeds(prev => {
-      const copia = [...prev]
-      const actuales = copia[idx].momento
-      copia[idx] = {
-        ...copia[idx],
+      const c = [...prev]
+      const actuales = c[idx].momento
+      c[idx] = {
+        ...c[idx],
         momento: actuales.includes(momento)
           ? actuales.filter(m => m !== momento)
           : [...actuales, momento]
       }
-      return copia
+      return c
     })
+  }
+
+  function agregarMed() {
+    setMeds(prev => [...prev, { ...MED_VACIA }])
+  }
+
+  function eliminarMed(idx: number) {
+    setMeds(prev => prev.filter((_, i) => i !== idx))
   }
 
   async function handleGuardar() {
     if (!usuario) return
-    const incluidos = meds.filter(m => m.incluir)
-    if (incluidos.length === 0) { setError('Selecciona al menos un remedio.'); return }
+    const incluidos = meds.filter(m => m.incluir && m.nombre.trim())
+    if (incluidos.length === 0) { setError('Agrega al menos un remedio con nombre.'); return }
 
     setPaso('guardando')
     try {
       for (const m of incluidos) {
-        // Buscar el producto en el catálogo
         const res = await fetch(`/api/buscar?q=${encodeURIComponent(m.nombre)}`)
         const data = await res.json()
         const productoId = data.resultados?.[0]?.id ?? null
@@ -143,72 +160,81 @@ export default function RecetaPage() {
 
   return (
     <main className="min-h-screen" style={{ background: '#EFF4F0' }}>
-      {/* Header */}
       <div style={{ background: '#0B5966' }} className="px-6 pt-12 pb-8 text-white">
-        <button onClick={() => router.push('/')} className="flex items-center gap-2 mb-4 opacity-80">
+        <button onClick={() => paso === 'inicio' ? router.push('/') : setPaso('inicio')}
+          className="flex items-center gap-2 mb-4 opacity-80">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
           </svg>
           <span className="text-base">Volver</span>
         </button>
-        <h1 className="text-2xl font-bold">Escanear receta</h1>
+        <h1 className="text-2xl font-bold">Mis remedios de receta</h1>
         <p className="text-base mt-1" style={{ color: '#A8D8CE' }}>
-          {paso === 'foto'       && 'Fotografía tu receta médica'}
-          {paso === 'procesando' && 'Leyendo la receta...'}
-          {paso === 'revision'   && 'Revisa tus remedios'}
-          {paso === 'guardando'  && 'Guardando...'}
-          {paso === 'listo'      && '¡Listo!'}
+          {paso === 'inicio'      && 'Escanea o ingresa manualmente'}
+          {paso === 'procesando'  && 'Leyendo la receta...'}
+          {paso === 'revision'    && 'Revisa y confirma'}
+          {paso === 'guardando'   && 'Guardando...'}
+          {paso === 'listo'       && '¡Listo!'}
         </p>
       </div>
 
       <div className="max-w-md mx-auto px-4 py-6">
 
-        {/* Paso 1: Foto */}
-        {paso === 'foto' && (
-          <div>
-            {/* Opción 1: Cámara */}
-            <button onClick={() => { if (fileRef.current) { (fileRef.current as any).capture = 'environment'; fileRef.current.click() } }}
-              className="w-full py-8 border-2 border-dashed border-gray-300 rounded-2xl bg-white flex items-center gap-4 px-6 mb-3">
+        {/* Inicio: elegir modo */}
+        {paso === 'inicio' && (
+          <div className="space-y-3">
+            {/* Opción 1: Fotografiar */}
+            <button onClick={() => fileRef.current?.click()}
+              className="w-full py-8 border-2 border-dashed border-gray-300 rounded-2xl bg-white flex items-center gap-5 px-6">
               <span className="text-4xl flex-shrink-0">📷</span>
               <div className="text-left">
-                <p className="text-gray-800 font-semibold text-lg">Fotografiar receta</p>
-                <p className="text-base text-gray-500">Usa la cámara del teléfono</p>
+                <p className="text-lg font-bold text-gray-800">Fotografiar receta</p>
+                <p className="text-base text-gray-500">La app lee los remedios automáticamente</p>
               </div>
             </button>
 
-            {/* Opción 2: Archivo o galería */}
-            <button onClick={() => { if (fileRef.current) { (fileRef.current as any).removeAttribute?.('capture'); fileRef.current.click() } }}
-              className="w-full py-8 border-2 border-dashed border-gray-300 rounded-2xl bg-white flex items-center gap-4 px-6 mb-4">
+            {/* Opción 2: Subir archivo */}
+            <button onClick={() => fileRef.current?.click()}
+              className="w-full py-6 border-2 border-dashed border-gray-300 rounded-2xl bg-white flex items-center gap-5 px-6">
               <span className="text-4xl flex-shrink-0">📁</span>
               <div className="text-left">
-                <p className="text-gray-800 font-semibold text-lg">Subir archivo</p>
+                <p className="text-lg font-bold text-gray-800">Subir archivo</p>
                 <p className="text-base text-gray-500">Foto de galería o PDF</p>
               </div>
             </button>
 
-            <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={handleFoto} className="hidden"/>
+            {/* Opción 3: Manual */}
+            <button onClick={iniciarManual}
+              className="w-full py-6 border-2 border-dashed border-gray-300 rounded-2xl bg-white flex items-center gap-5 px-6">
+              <span className="text-4xl flex-shrink-0">✏️</span>
+              <div className="text-left">
+                <p className="text-lg font-bold text-gray-800">Ingresar manualmente</p>
+                <p className="text-base text-gray-500">Escribe los remedios y sus horarios</p>
+              </div>
+            </button>
 
-            {/* Nota de privacidad */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-              <p className="text-base text-blue-800">
-                🔒 Solo guardamos tus medicamentos y horarios. No almacenamos tu nombre, RUT ni datos del documento.
+            <input ref={fileRef} type="file" accept="image/*,application/pdf"
+              onChange={handleFoto} className="hidden"/>
+
+            {/* Privacidad */}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <p className="text-sm text-blue-800">
+                🔒 Solo guardamos tus medicamentos y horarios. No almacenamos tu nombre, RUT ni datos del médico.
               </p>
             </div>
-
-            {error && <p className="text-base text-red-700 text-center font-medium">{error}</p>}
           </div>
         )}
 
-        {/* Paso 2: Procesando */}
+        {/* Procesando */}
         {paso === 'procesando' && (
           <div className="bg-white rounded-2xl p-12 text-center shadow-sm">
-            <div className="w-12 h-12 border-3 border-t-transparent rounded-full animate-spin mx-auto mb-4"
+            <div className="w-12 h-12 border-t-transparent rounded-full animate-spin mx-auto mb-4"
               style={{ borderColor: '#0B5966', borderTopColor: 'transparent', borderWidth: 3 }}/>
             <p className="text-gray-800 font-semibold text-lg">Leyendo la receta...</p>
           </div>
         )}
 
-        {/* Paso 3: Revisión */}
+        {/* Revisión */}
         {paso === 'revision' && (
           <div className="space-y-4">
             {error && (
@@ -217,44 +243,66 @@ export default function RecetaPage() {
               </div>
             )}
 
-            <p className="text-base text-gray-700 px-1 font-medium">
-              Encontramos estos remedios. Revisa que estén correctos:
+            {preview && (
+              <div className="flex items-center gap-3 bg-white rounded-xl p-3 shadow-sm">
+                <img src={preview} alt="Receta" className="w-14 h-14 object-cover rounded-lg flex-shrink-0"/>
+                <div>
+                  <p className="font-medium text-gray-900 text-sm">Receta escaneada</p>
+                  <button onClick={() => { setPreview(null); setPaso('inicio') }}
+                    className="text-xs underline" style={{ color: '#0B5966' }}>
+                    Cambiar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <p className="text-base font-semibold text-gray-700 px-1">
+              {preview ? 'Remedios detectados — revisa que estén correctos:' : 'Agrega tus remedios:'}
             </p>
 
             {meds.map((m, i) => (
-              <div key={i} className={`rounded-2xl p-4 shadow-sm border-2 ${m.incluir ? 'bg-white' : 'bg-gray-50 opacity-60'}`}
+              <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border-2"
                 style={{ borderColor: m.incluir ? '#0B5966' : '#e5e7eb' }}>
 
-                {/* Nombre + checkbox */}
-                <label className="flex items-start gap-3 cursor-pointer mb-3">
+                {/* Header con checkbox */}
+                <div className="flex items-center gap-3 mb-3">
                   <input type="checkbox" checked={m.incluir}
                     onChange={e => actualizar(i, 'incluir', e.target.checked)}
-                    className="mt-1 w-5 h-5" style={{ accentColor: '#0B5966' }}/>
-                  <div className="flex-1">
-                    <input type="text" value={m.nombre}
-                      onChange={e => actualizar(i, 'nombre', e.target.value)}
-                      className="w-full text-lg font-bold text-gray-900 bg-transparent border-b-2 border-gray-200 outline-none focus:border-[#0B5966] py-1"
-                      style={{ color: '#1A2E2E' }}/>
-                    <input type="text" value={m.dosis}
-                      onChange={e => actualizar(i, 'dosis', e.target.value)}
-                      placeholder="Dosis"
-                      className="w-full text-base text-gray-600 bg-transparent outline-none mt-1"/>
-                  </div>
-                </label>
+                    className="w-5 h-5" style={{ accentColor: '#0B5966' }}/>
+                  <input type="text" value={m.nombre}
+                    onChange={e => actualizar(i, 'nombre', e.target.value)}
+                    placeholder="Nombre del remedio"
+                    className="flex-1 text-lg font-bold bg-transparent border-b-2 border-gray-200 outline-none focus:border-[#0B5966] py-1"
+                    style={{ color: '#1A2E2E' }}/>
+                  {meds.length > 1 && (
+                    <button onClick={() => eliminarMed(i)}
+                      className="text-gray-400 hover:text-red-500 text-xl">✕</button>
+                  )}
+                </div>
 
                 {m.incluir && (
-                  <div className="pl-8">
-                    <p className="text-base text-gray-600 mb-2">{m.posologia}</p>
-                    <p className="text-sm font-medium text-gray-500 mb-2">¿Cuándo lo tomas?</p>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="text" value={m.dosis}
+                        onChange={e => actualizar(i, 'dosis', e.target.value)}
+                        placeholder="Dosis: 5 mg"
+                        className="px-3 py-2.5 rounded-xl border-2 border-gray-200 text-base outline-none focus:border-[#0B5966]"
+                        style={{ color: '#1A2E2E' }}/>
+                      <input type="text" value={m.posologia}
+                        onChange={e => actualizar(i, 'posologia', e.target.value)}
+                        placeholder="Ej: 1 por noche"
+                        className="px-3 py-2.5 rounded-xl border-2 border-gray-200 text-base outline-none focus:border-[#0B5966]"
+                        style={{ color: '#1A2E2E' }}/>
+                    </div>
                     <div className="flex gap-2">
                       {MOMENTOS.map(mom => {
                         const activo = m.momento.includes(mom.value)
                         return (
                           <button key={mom.value} onClick={() => toggleMomento(i, mom.value)}
-                            className="flex-1 py-3 rounded-xl text-base font-semibold transition-colors"
+                            className="flex-1 py-3 rounded-xl text-sm font-bold"
                             style={activo
                               ? { background: '#0B5966', color: '#FFFFFF' }
-                              : { background: '#F3F4F6', color: '#4B5563' }}>
+                              : { background: '#F3F4F6', color: '#6B7280' }}>
                             {mom.emoji} {mom.label}
                           </button>
                         )
@@ -265,28 +313,34 @@ export default function RecetaPage() {
               </div>
             ))}
 
-            {/* Permanente */}
+            <button onClick={agregarMed}
+              className="w-full py-3.5 rounded-2xl border-2 border-dashed text-base font-semibold"
+              style={{ borderColor: '#0B5966', color: '#0B5966', background: 'white' }}>
+              + Agregar otro remedio
+            </button>
+
             <label className="flex items-center gap-3 cursor-pointer bg-white rounded-2xl p-4 shadow-sm">
               <div onClick={() => setPermanente(!permanente)}
-                className="w-12 h-7 rounded-full transition-colors flex items-center px-1 flex-shrink-0"
+                className="w-12 h-7 rounded-full transition-colors flex items-center px-1"
                 style={{ background: permanente ? '#0B5966' : '#d1d5db' }}>
                 <div className="w-5 h-5 rounded-full bg-white shadow transition-transform"
                   style={{ transform: permanente ? 'translateX(20px)' : 'none' }}/>
               </div>
-              <span className="text-base text-gray-800 font-medium">Tratamiento permanente</span>
+              <span className="text-base text-gray-800 font-medium">Tratamiento permanente / crónico</span>
             </label>
 
-            {error && <p className="text-base text-red-700 text-center font-medium">{error}</p>}
+            {error && <p className="text-base text-red-700 font-medium text-center">{error}</p>}
 
             <button onClick={handleGuardar}
-              className="w-full py-5 rounded-2xl text-white font-bold text-lg"
+              disabled={meds.filter(m => m.incluir && m.nombre.trim()).length === 0}
+              className="w-full py-5 rounded-2xl text-white font-bold text-lg disabled:opacity-40"
               style={{ background: '#0B5966' }}>
-              Agregar a mi plan de remedios
+              Agregar al plan de toma
             </button>
           </div>
         )}
 
-        {/* Paso 4: Guardando */}
+        {/* Guardando */}
         {paso === 'guardando' && (
           <div className="bg-white rounded-2xl p-12 text-center shadow-sm">
             <div className="w-12 h-12 border-t-transparent rounded-full animate-spin mx-auto mb-4"
@@ -295,7 +349,7 @@ export default function RecetaPage() {
           </div>
         )}
 
-        {/* Paso 5: Listo */}
+        {/* Listo */}
         {paso === 'listo' && (
           <div className="bg-white rounded-2xl p-12 text-center shadow-sm">
             <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
@@ -303,8 +357,8 @@ export default function RecetaPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
               </svg>
             </div>
-            <p className="text-gray-900 font-bold text-xl">¡Plan guardado!</p>
-            <p className="text-gray-600 text-base mt-1">Mostrando tu plan de toma...</p>
+            <p className="text-gray-900 font-bold text-xl">¡Guardado!</p>
+            <p className="text-gray-500 text-base mt-1">Yendo al plan de toma...</p>
           </div>
         )}
       </div>
