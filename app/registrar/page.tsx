@@ -6,6 +6,8 @@
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { obtenerUsuario, obtenerCredenciales, subirFotoBoleta } from '../../lib/auth'
+import EnviarEmail from '../../components/EnviarEmail'
+import { htmlResumenCompra } from '../api/enviar-email/route'
 import { supabase } from '../../lib/supabase'
 
 interface ProductoBoleta {
@@ -50,6 +52,8 @@ function RegistrarContent() {
   const [preview, setPreview]       = useState<string | null>(null)
   const [datos, setDatos]           = useState<DatosBoleta | null>(null)
   const [error, setError]           = useState<string | null>(null)
+  const [emailHtml, setEmailHtml]   = useState('')
+  const [emailUsuario, setEmailUsuario] = useState('')
   const [nombreProductoInicial, setNombreProductoInicial] = useState('')
 
   useEffect(() => {
@@ -199,8 +203,21 @@ function RegistrarContent() {
       const { error } = await supabase.from('precio_usuario').insert(inserts)
       if (error) throw error
 
+      // Generar HTML del resumen
+      const htmlEmail = htmlResumenCompra({
+        farmacia: datos?.farmacia ?? '',
+        fecha: datos?.fecha ?? '',
+        productos: incluidos.map(p => ({
+          nombre: p.nombre_confirmado || p.nombre_boleta,
+          precio: p.precio_unitario,
+          descuento: p.tipo_descuento,
+          credencial: p.credencial_usada,
+        })),
+        total: incluidos.reduce((s, p) => s + p.precio_unitario, 0),
+      })
+      setEmailHtml(htmlEmail)
+      setEmailUsuario(usuario.email ?? '')
       setPaso('listo')
-      setTimeout(() => router.push('/?registrado=1'), 2000)
     } catch (e: any) {
       setError(e.message ?? 'Error al guardar.')
       setPaso('revision')
@@ -408,14 +425,31 @@ function RegistrarContent() {
 
         {/* Listo */}
         {paso === 'listo' && (
-          <div className="bg-white rounded-2xl p-12 text-center shadow-sm">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-9 h-9 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
-              </svg>
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
+              <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-9 h-9 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
+                </svg>
+              </div>
+              <p className="text-gray-900 font-bold text-xl">¡Registrado!</p>
+              <p className="text-gray-500 text-base mt-1">Compra guardada correctamente</p>
             </div>
-            <p className="text-gray-900 font-bold text-xl">¡Registrado!</p>
-            <p className="text-gray-500 text-base mt-1">Volviendo a la app...</p>
+            {emailHtml && (
+              <div className="bg-white rounded-2xl p-5 shadow-sm">
+                <EnviarEmail
+                  asunto="Resumen de tu compra — Mis Remedios Chile"
+                  html={emailHtml}
+                  emailDefault={emailUsuario}
+                  labelBoton="Enviar resumen por email"
+                />
+              </div>
+            )}
+            <button onClick={() => router.push('/')}
+              className="w-full py-4 rounded-2xl text-white font-bold text-base"
+              style={{ background: '#0B5966' }}>
+              Volver al inicio →
+            </button>
           </div>
         )}
       </div>

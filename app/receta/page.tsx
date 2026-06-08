@@ -5,6 +5,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { obtenerUsuario, agregarRemedioConPosologia } from '../../lib/auth'
+import EnviarEmail from '../../components/EnviarEmail'
+import { htmlPlanToma } from '../api/enviar-email/route'
 
 interface MedReceta {
   nombre: string
@@ -35,6 +37,8 @@ export default function RecetaPage() {
   const [meds, setMeds]             = useState<MedReceta[]>([MED_VACIA])
   const [permanente, setPermanente] = useState(false)
   const [error, setError]           = useState<string | null>(null)
+  const [emailHtml, setEmailHtml]   = useState('')
+  const [emailUsuario, setEmailUsuario] = useState('')
 
   useEffect(() => {
     obtenerUsuario().then(u => {
@@ -148,8 +152,19 @@ export default function RecetaPage() {
           permanente,
         })
       }
+      // Generar HTML del email
+      const htmlEmail = htmlPlanToma({
+        medicamentos: incluidos.map(m => ({
+          nombre:   m.nombre,
+          dosis:    m.dosis,
+          posologia: m.posologia,
+          momento:  m.momento,
+        })),
+        permanente,
+      })
+      setEmailHtml(htmlEmail)
+      setEmailUsuario(usuario.email ?? '')
       setPaso('listo')
-      setTimeout(() => router.push('/plan'), 1500)
     } catch {
       setError('Error al guardar. Intenta de nuevo.')
       setPaso('revision')
