@@ -230,7 +230,7 @@ export default function Home() {
                 <button onClick={() => router.push('/plan')}
                   className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
                   style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                  💊 <span>Mi plan</span>
+                  💊 <span>Mi Canasta</span>
                 </button>
               ) : (
                 <button onClick={() => router.push('/auth')}
@@ -247,12 +247,12 @@ export default function Home() {
                 <button onClick={() => router.push('/receta')}
                   className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
                   style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                  📄 <span>Receta</span>
+                  📄 <span>Mi Receta</span>
                 </button>
                 <button onClick={() => router.push('/registrar')}
                   className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
                   style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                  📷 <span>Registrar</span>
+                  📷 <span>Mi Compra</span>
                 </button>
                 <button onClick={() => router.push('/historial')}
                   className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
