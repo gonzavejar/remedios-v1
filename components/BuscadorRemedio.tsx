@@ -51,7 +51,7 @@ export default function BuscadorRemedio({
     if (seleccionado) return
     if (query.length < 2) { setResultados([]); setAbierto(false); setSugerencia(null); return }
 
-    clearTimeout(timeoutRef.current)
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
     timeoutRef.current = setTimeout(async () => {
       setCargando(true)
       try {
@@ -65,7 +65,7 @@ export default function BuscadorRemedio({
       }
     }, 280)
 
-    return () => clearTimeout(timeoutRef.current)
+    return () => if (timeoutRef.current) clearTimeout(timeoutRef.current)
   }, [query, seleccionado])
 
   function handleSeleccionar(r: Resultado) {
