@@ -41,7 +41,7 @@ export default function BuscadorRemedio({
   const [sugerencia, setSugerencia] = useState<string | null>(null)
   const [seleccionado, setSeleccionado] = useState(false)
   const inputRef  = useRef<HTMLInputElement>(null)
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus()
