@@ -243,7 +243,7 @@ export default function Home() {
 
             {/* Fila 2: solo autenticado */}
             {usuario && (
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-5 gap-2">
                 <button onClick={() => router.push('/receta')}
                   className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
                   style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
@@ -259,10 +259,15 @@ export default function Home() {
                   style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
                   🧾 <span>Historial</span>
                 </button>
+                <button onClick={() => router.push('/analisis')}
+                  className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
+                  style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
+                  📈 <span>Análisis</span>
+                </button>
                 <button onClick={() => router.push('/perfil')}
                   className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
                   style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                  🎫 <span>Convenios</span>
+                  🎫 <span>Perfil</span>
                 </button>
               </div>
             )}
