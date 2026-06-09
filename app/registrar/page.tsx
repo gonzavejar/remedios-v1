@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { obtenerUsuario, obtenerCredenciales, subirFotoBoleta } from '../../lib/auth'
+import BuscadorRemedio from '../../components/BuscadorRemedio'
 import EnviarEmail, { textoResumenCompra } from '../../components/EnviarEmail'
 import { supabase } from '../../lib/supabase'
 
@@ -354,16 +355,22 @@ function RegistrarContent() {
               <div className="space-y-4">
                 {datos.productos.map((p, i) => (
                   <div key={i} className={`p-3 rounded-xl border ${p.incluir ? 'border-[#0B5966]/20' : 'border-gray-100 opacity-60'}`}>
-                    <label className="flex items-start gap-2 cursor-pointer mb-3">
+                    <div className="flex items-start gap-2 mb-3">
                       <input type="checkbox" checked={p.incluir}
                         onChange={e => actualizarProducto(i, 'incluir', e.target.checked)}
-                        className="mt-1 w-4 h-4" style={{ accentColor: '#0B5966' }}/>
-                      <input type="text" value={p.nombre_confirmado}
-                        onChange={e => actualizarProducto(i, 'nombre_confirmado', e.target.value)}
-                        placeholder="Nombre del remedio"
-                        className="flex-1 text-base font-medium bg-transparent border-b border-gray-200 outline-none focus:border-[#0B5966]"
-                        style={{ color: '#1A2E2E' }}/>
-                    </label>
+                        className="mt-1 w-4 h-4 flex-shrink-0" style={{ accentColor: '#0B5966' }}/>
+                      <div className="flex-1 min-w-0">
+                        <BuscadorRemedio
+                          placeholder="Nombre del remedio..."
+                          valorInicial={p.nombre_confirmado}
+                          onSeleccionar={r => {
+                            actualizarProducto(i, 'nombre_confirmado', r.nombre_comercial)
+                            actualizarProducto(i, 'producto_id', r.id)
+                          }}
+                          onTextoLibre={texto => actualizarProducto(i, 'nombre_confirmado', texto)}
+                        />
+                      </div>
+                    </div>
                     {p.incluir && (
                       <div className="space-y-2 pl-6">
                         <div className="flex items-center gap-2">
