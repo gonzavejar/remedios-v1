@@ -6,8 +6,7 @@
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { obtenerUsuario, obtenerCredenciales, subirFotoBoleta } from '../../lib/auth'
-import EnviarEmail from '../../components/EnviarEmail'
-import { htmlResumenCompra } from '../api/enviar-email/route'
+import EnviarEmail, { textoResumenCompra } from '../../components/EnviarEmail'
 import { supabase } from '../../lib/supabase'
 
 interface ProductoBoleta {
@@ -52,7 +51,7 @@ function RegistrarContent() {
   const [preview, setPreview]       = useState<string | null>(null)
   const [datos, setDatos]           = useState<DatosBoleta | null>(null)
   const [error, setError]           = useState<string | null>(null)
-  const [emailHtml, setEmailHtml]   = useState('')
+  const [emailTexto, setEmailTexto] = useState('')
   const [emailUsuario, setEmailUsuario] = useState('')
   const [nombreProductoInicial, setNombreProductoInicial] = useState('')
 
@@ -203,8 +202,8 @@ function RegistrarContent() {
       const { error } = await supabase.from('precio_usuario').insert(inserts)
       if (error) throw error
 
-      // Generar HTML del resumen
-      const htmlEmail = htmlResumenCompra({
+      // Generar texto del resumen
+      const emailTexto = textoResumenCompra({
         farmacia: datos?.farmacia ?? '',
         fecha: datos?.fecha ?? '',
         productos: incluidos.map(p => ({
@@ -215,7 +214,7 @@ function RegistrarContent() {
         })),
         total: incluidos.reduce((s, p) => s + p.precio_unitario, 0),
       })
-      setEmailHtml(htmlEmail)
+      setEmailTexto(emailTexto)
       setEmailUsuario(usuario.email ?? '')
       setPaso('listo')
     } catch (e: any) {
@@ -435,11 +434,11 @@ function RegistrarContent() {
               <p className="text-gray-900 font-bold text-xl">¡Registrado!</p>
               <p className="text-gray-500 text-base mt-1">Compra guardada correctamente</p>
             </div>
-            {emailHtml && (
+            {emailTexto && (
               <div className="bg-white rounded-2xl p-5 shadow-sm">
                 <EnviarEmail
                   asunto="Resumen de tu compra — Mis Remedios Chile"
-                  html={emailHtml}
+                  textoPlano={emailTexto}
                   emailDefault={emailUsuario}
                   labelBoton="Enviar resumen por email"
                 />

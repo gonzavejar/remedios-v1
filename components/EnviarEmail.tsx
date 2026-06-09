@@ -1,79 +1,95 @@
 'use client'
-// components/EnviarEmail.tsx
-// Componente reutilizable: campo de email + botón enviar.
-// Se usa en la pantalla de éxito de boleta y receta.
-
-import { useState } from 'react'
+// components/EnviarEmail.tsx — versión 2
+// Abre la app de correo del usuario con el mensaje pre-redactado.
+// El usuario decide a quién envía y puede editar antes de mandar.
 
 interface Props {
   asunto: string
-  html: string
-  emailDefault?: string        // pre-rellenar con email del usuario
+  textoPlano: string       // mailto solo soporta texto plano
+  emailDefault?: string    // destinatario sugerido (editable por el usuario)
   labelBoton?: string
 }
 
-export default function EnviarEmail({ asunto, html, emailDefault = '', labelBoton = 'Enviar por email' }: Props) {
-  const [email, setEmail]     = useState(emailDefault)
-  const [enviando, setEnviando] = useState(false)
-  const [ok, setOk]           = useState(false)
-  const [error, setError]     = useState<string | null>(null)
+export default function EnviarEmail({
+  asunto,
+  textoPlano,
+  emailDefault = '',
+  labelBoton = 'Abrir en mi correo',
+}: Props) {
 
-  async function handleEnviar() {
-    if (!email.includes('@')) { setError('Escribe un email válido.'); return }
-    setEnviando(true)
-    setError(null)
-
-    try {
-      const res = await fetch('/api/enviar-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ destinatario: email, asunto, html }),
-      })
-      const data = await res.json()
-      if (data.ok) {
-        setOk(true)
-      } else {
-        setError(data.error ?? 'No se pudo enviar. Intenta de nuevo.')
-      }
-    } catch {
-      setError('Error de conexión.')
-    } finally {
-      setEnviando(false)
-    }
+  function handleAbrir() {
+    const dest    = encodeURIComponent(emailDefault)
+    const subject = encodeURIComponent(asunto)
+    const body    = encodeURIComponent(textoPlano)
+    window.location.href = `mailto:${dest}?subject=${subject}&body=${body}`
   }
-
-  if (ok) return (
-    <div className="flex items-center gap-3 px-4 py-3 rounded-xl"
-      style={{ background: 'rgba(29,158,117,0.1)' }}>
-      <span className="text-xl">✅</span>
-      <p className="text-base font-medium" style={{ color: '#1D9E75' }}>
-        Email enviado a {email}
-      </p>
-    </div>
-  )
 
   return (
     <div className="space-y-2">
-      <p className="text-base font-semibold text-gray-700">Enviar resumen por email</p>
-      <div className="flex gap-2">
-        <input
-          type="email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          placeholder="correo@ejemplo.com"
-          className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 text-base outline-none focus:border-[#0B5966]"
-          style={{ color: '#1A2E2E' }}
-        />
-        <button
-          onClick={handleEnviar}
-          disabled={enviando || !email}
-          className="px-4 py-3 rounded-xl text-white font-bold text-sm disabled:opacity-50 flex-shrink-0"
-          style={{ background: '#0B5966' }}
-        >
-          {enviando ? '...' : '📧 Enviar'}
-        </button>
-      </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      <p className="text-base font-semibold text-gray-700">Enviar por email</p>
+      <p className="text-sm text-gray-500">
+        Abre tu app de correo con el resumen listo. Puedes agregar más destinatarios antes de enviar.
+      </p>
+      <button
+        onClick={handleAbrir}
+        className="w-full py-4 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-2"
+        style={{ background: '#0B5966' }}
+      >
+        📧 {labelBoton}
+      </button>
     </div>
   )
+}
+
+// ─── Helpers para generar el texto plano ──────────────────────────────────────
+
+/** Texto plano para resumen de compra (boleta) */
+export function textoResumenCompra(params: {
+  farmacia: string
+  fecha: string
+  productos: { nombre: string; precio: number; descuento: string; credencial?: string }[]
+  total: number
+}): string {
+  const lineas = params.productos.map(p => {
+    const descuento = p.descuento !== 'ninguno'
+      ? ` (${p.credencial ?? p.descuento})`
+      : ''
+    return `• ${p.nombre}: $${p.precio.toLocaleString('es-CL')}${descuento}`
+  }).join('\n')
+
+  return `RESUMEN DE COMPRA
+${params.farmacia} — ${params.fecha}
+
+${lineas}
+
+Total: $${params.total.toLocaleString('es-CL')}
+
+---
+Enviado desde Mis Remedios Chile
+Beneficios reales · Fuentes oficiales`
+}
+
+/** Texto plano para plan de toma (receta) */
+export function textoPlanToma(params: {
+  medicamentos: { nombre: string; dosis: string; posologia: string; momento: string[] }[]
+  permanente: boolean
+}): string {
+  const porMomento = (m: string) =>
+    params.medicamentos.filter(med => med.momento.includes(m))
+
+  const seccion = (titulo: string, momento: string) => {
+    const lista = porMomento(momento)
+    if (lista.length === 0) return ''
+    const items = lista.map(m =>
+      `• ${m.nombre}${m.dosis ? ` ${m.dosis}` : ''} — ${m.posologia}`
+    ).join('\n')
+    return `\n${titulo}\n${items}\n`
+  }
+
+  return `MI PLAN DE REMEDIOS
+${params.permanente ? 'Tratamiento crónico / permanente' : 'Tratamiento indicado'}
+${seccion('EN LA MAÑANA:', 'mañana')}${seccion('AL MEDIODÍA:', 'mediodia')}${seccion('EN LA NOCHE:', 'noche')}
+---
+Consulta siempre con tu médico ante cualquier duda.
+Enviado desde Mis Remedios Chile`
 }

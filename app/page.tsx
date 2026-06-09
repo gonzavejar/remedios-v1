@@ -213,30 +213,52 @@ export default function Home() {
         <p className="text-sm mt-2" style={{ color: '#A8D8CE' }}>Beneficios reales · Fuentes oficiales</p>
 
         {/* Accesos rápidos cuando está autenticado */}
-        {usuario && (
-          <div className="grid grid-cols-2 gap-2 mt-5">
-            <button onClick={() => router.push('/plan')}
-              className="py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
-              style={{ background: 'rgba(255,255,255,0.15)', color: '#FFFFFF' }}>
-              💊 Mi plan
-            </button>
-            <button onClick={() => router.push('/receta')}
-              className="py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
-              style={{ background: 'rgba(255,255,255,0.15)', color: '#FFFFFF' }}>
-              📄 Receta
-            </button>
-            <button onClick={() => router.push('/historial')}
-              className="py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
-              style={{ background: 'rgba(255,255,255,0.15)', color: '#FFFFFF' }}>
-              🧾 Historial
-            </button>
-            <button onClick={() => router.push('/perfil')}
-              className="py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
-              style={{ background: 'rgba(255,255,255,0.15)', color: '#FFFFFF' }}>
-              🎫 Convenios
-            </button>
-          </div>
-        )}
+        {/* Accesos rápidos - siempre visibles */}
+        <div className="grid grid-cols-3 gap-2 mt-5">
+          <button onClick={() => router.push('/farmacias')}
+            className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
+            style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
+            🗺 <span>Farmacias</span>
+          </button>
+          {usuario ? (
+            <>
+              <button onClick={() => router.push('/plan')}
+                className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
+                style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
+                💊 <span>Mi plan</span>
+              </button>
+              <button onClick={() => router.push('/receta')}
+                className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
+                style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
+                📄 <span>Receta</span>
+              </button>
+              <button onClick={() => router.push('/historial')}
+                className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
+                style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
+                🧾 <span>Historial</span>
+              </button>
+              <button onClick={() => router.push('/registrar')}
+                className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
+                style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
+                📷 <span>Registrar</span>
+              </button>
+              <button onClick={() => router.push('/perfil')}
+                className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
+                style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
+                🎫 <span>Convenios</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <div/>
+              <button onClick={() => router.push('/auth')}
+                className="col-span-2 py-3 rounded-xl text-sm font-bold"
+                style={{ background: 'rgba(255,255,255,0.25)', color: '#FFFFFF' }}>
+                Ingresar / Registrarse
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="max-w-lg mx-auto px-4 pb-16">

@@ -5,8 +5,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { obtenerUsuario, agregarRemedioConPosologia } from '../../lib/auth'
-import EnviarEmail from '../../components/EnviarEmail'
-import { htmlPlanToma } from '../api/enviar-email/route'
+import EnviarEmail, { textoPlanToma } from '../../components/EnviarEmail'
 
 interface MedReceta {
   nombre: string
@@ -37,7 +36,7 @@ export default function RecetaPage() {
   const [meds, setMeds]             = useState<MedReceta[]>([MED_VACIA])
   const [permanente, setPermanente] = useState(false)
   const [error, setError]           = useState<string | null>(null)
-  const [emailHtml, setEmailHtml]   = useState('')
+  const [emailTexto, setEmailTexto] = useState('')
   const [emailUsuario, setEmailUsuario] = useState('')
 
   useEffect(() => {
@@ -152,17 +151,16 @@ export default function RecetaPage() {
           permanente,
         })
       }
-      // Generar HTML del email
-      const htmlEmail = htmlPlanToma({
+      const emailTexto = textoPlanToma({
         medicamentos: incluidos.map(m => ({
-          nombre:   m.nombre,
-          dosis:    m.dosis,
+          nombre:    m.nombre,
+          dosis:     m.dosis,
           posologia: m.posologia,
-          momento:  m.momento,
+          momento:   m.momento,
         })),
         permanente,
       })
-      setEmailHtml(htmlEmail)
+      setEmailTexto(emailTexto)
       setEmailUsuario(usuario.email ?? '')
       setPaso('listo')
     } catch {
@@ -366,14 +364,30 @@ export default function RecetaPage() {
 
         {/* Listo */}
         {paso === 'listo' && (
-          <div className="bg-white rounded-2xl p-12 text-center shadow-sm">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-9 h-9 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
-              </svg>
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
+              <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-9 h-9 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
+                </svg>
+              </div>
+              <p className="text-gray-900 font-bold text-xl">¡Plan guardado!</p>
             </div>
-            <p className="text-gray-900 font-bold text-xl">¡Guardado!</p>
-            <p className="text-gray-500 text-base mt-1">Yendo al plan de toma...</p>
+            {emailTexto && (
+              <div className="bg-white rounded-2xl p-5 shadow-sm">
+                <EnviarEmail
+                  asunto="Tu plan de remedios — Mis Remedios Chile"
+                  textoPlano={emailTexto}
+                  emailDefault={emailUsuario}
+                  labelBoton="Enviar plan por email"
+                />
+              </div>
+            )}
+            <button onClick={() => router.push('/plan')}
+              className="w-full py-4 rounded-2xl text-white font-bold text-base"
+              style={{ background: '#0B5966' }}>
+              Ver mi plan →
+            </button>
           </div>
         )}
       </div>
