@@ -61,6 +61,7 @@ export default function Home() {
   const router = useRouter()
 
   const [usuario, setUsuario]               = useState<UsuarioActual | null>(null)
+  const [cargandoAuth, setCargandoAuth]     = useState(true)
   const [hints, setHints]                   = useState<string[]>([])
   const [query, setQuery]                   = useState('')
   const [sugerencias, setSugerencias]       = useState<Sugerencia[]>([])
@@ -87,6 +88,7 @@ export default function Home() {
     // Leer sesión inicial
     obtenerUsuario().then(async u => {
       setUsuario(u)
+      setCargandoAuth(false)
       if (u) {
         const creds = await obtenerCredenciales(u.id)
         if (creds) setHints(generarHints(creds))
@@ -96,6 +98,7 @@ export default function Home() {
     // Escuchar cambios de auth (necesario para callback de Google)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        setCargandoAuth(false)
         if (session?.user) {
           const u = {
             id: session.user.id,
@@ -213,52 +216,58 @@ export default function Home() {
         <p className="text-sm mt-2" style={{ color: '#A8D8CE' }}>Beneficios reales · Fuentes oficiales</p>
 
         {/* Accesos rápidos cuando está autenticado */}
-        {/* Accesos rápidos - siempre visibles */}
-        <div className="grid grid-cols-3 gap-2 mt-5">
-          <button onClick={() => router.push('/farmacias')}
-            className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
-            style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-            🗺 <span>Farmacias</span>
-          </button>
-          {usuario ? (
-            <>
-              <button onClick={() => router.push('/plan')}
+        {/* Accesos rápidos — siempre visibles */}
+        {!cargandoAuth && (
+          <div className="mt-5 space-y-2">
+            {/* Fila 1: siempre disponible */}
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => router.push('/farmacias')}
                 className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
                 style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                💊 <span>Mi plan</span>
+                🗺 <span>Farmacias</span>
               </button>
-              <button onClick={() => router.push('/receta')}
-                className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
-                style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                📄 <span>Receta</span>
-              </button>
-              <button onClick={() => router.push('/historial')}
-                className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
-                style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                🧾 <span>Historial</span>
-              </button>
-              <button onClick={() => router.push('/registrar')}
-                className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
-                style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                📷 <span>Registrar</span>
-              </button>
-              <button onClick={() => router.push('/perfil')}
-                className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
-                style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                🎫 <span>Convenios</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <div/>
-              <button onClick={() => router.push('/auth')}
-                className="col-span-2 py-3 rounded-xl text-sm font-bold"
-                style={{ background: 'rgba(255,255,255,0.25)', color: '#FFFFFF' }}>
-                Ingresar / Registrarse
-              </button>
-            </>
-          )}
-        </div>
+              {usuario ? (
+                <button onClick={() => router.push('/plan')}
+                  className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
+                  style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
+                  💊 <span>Mi plan</span>
+                </button>
+              ) : (
+                <button onClick={() => router.push('/auth')}
+                  className="py-3 rounded-xl text-sm font-bold"
+                  style={{ background: 'rgba(255,255,255,0.25)', color: '#FFFFFF' }}>
+                  Ingresar →
+                </button>
+              )}
+            </div>
+
+            {/* Fila 2: solo autenticado */}
+            {usuario && (
+              <div className="grid grid-cols-4 gap-2">
+                <button onClick={() => router.push('/receta')}
+                  className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
+                  style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
+                  📄 <span>Receta</span>
+                </button>
+                <button onClick={() => router.push('/registrar')}
+                  className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
+                  style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
+                  📷 <span>Registrar</span>
+                </button>
+                <button onClick={() => router.push('/historial')}
+                  className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
+                  style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
+                  🧾 <span>Historial</span>
+                </button>
+                <button onClick={() => router.push('/perfil')}
+                  className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
+                  style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
+                  🎫 <span>Convenios</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="max-w-lg mx-auto px-4 pb-16">
