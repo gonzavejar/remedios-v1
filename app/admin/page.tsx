@@ -44,6 +44,7 @@ interface PrecioPendiente {
   tipo_registro: string
   foto_boleta_url: string | null
   tipo_descuento: string
+  credencial_usada: string | null
   created_at: string
 }
 
