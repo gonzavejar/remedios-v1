@@ -73,28 +73,31 @@ Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin backticks, sin c
   "advertencia": null
 }`
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [archivoPart, { text: prompt }]
-          }],
-          generationConfig: {
-            temperature: 0,
-            maxOutputTokens: 3000,
-          }
-        })
-      }
-    )
+    const modelos = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
+    let response: Response | null = null
+    let lastError = ''
 
-    if (!response.ok) {
-      const errBody = await response.text()
-      console.error('Error Gemini API:', response.status, errBody)
-      throw new Error(`Error Gemini API: ${response.status}`)
+    for (const modelo of modelos) {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [archivoPart, { text: prompt }] }],
+            generationConfig: { temperature: 0, maxOutputTokens: 3000 }
+          })
+        }
+      )
+      if (res.ok) { response = res; break }
+      const errBody = await res.text()
+      lastError = `Error Gemini API (${modelo}): ${res.status} ${errBody}`
+      console.error(lastError)
+      // Solo reintentar en 503 (saturado) o 429 (cuota), no en 404 o 400
+      if (res.status !== 503 && res.status !== 429) break
     }
+
+    if (!response) throw new Error(lastError)
 
     const data = await response.json()
     const texto = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
