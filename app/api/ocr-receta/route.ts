@@ -1,5 +1,5 @@
-// app/api/ocr-receta/route.ts — versión 4
-// Usa Google Gemini para OCR de recetas médicas chilenas.
+// app/api/ocr-receta/route.ts — versión 6
+// Prompt optimizado para recetas chilenas: privadas, SNRE, boletas y manuscritas
 
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -11,31 +11,51 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: 'Falta GEMINI_API_KEY' }, { status: 500 })
 
-    const prompt = `Analiza esta receta médica chilena.
+    const prompt = `Eres un experto farmacéutico chileno con 20 años de experiencia leyendo recetas médicas de todo tipo.
 
-IMPORTANTE — PRIVACIDAD: NO extraigas ni incluyas ningún dato personal del paciente
-(nombre, RUT, dirección, edad) ni del médico. Extrae ÚNICAMENTE los medicamentos y
-cómo deben tomarse.
+Analiza esta imagen. Puede ser:
+1. RECETA PRIVADA digital (clínica, consulta particular) — letra de computador, bien estructurada
+2. RECETA ELECTRÓNICA SNRE de MINSAL — formato digital oficial, tiene código de 20 caracteres
+3. RECETA MANUSCRITA — letra de médico, puede ser difícil de leer, con abreviaturas
+4. BOLETA DE FARMACIA — Cruz Verde, Ahumada, Salcobrand, Dr. Simi, etc.
 
-Responde SOLO con JSON válido, sin texto adicional ni backticks:
+PARA RECETAS MANUSCRITAS — instrucciones especiales:
+- Los médicos usan abreviaturas latinas: "c/8h" = cada 8 horas, "c/12h" = cada 12 horas, "c/24h" = una vez al día, "SOS" = solo si es necesario, "ac" = antes de comer, "pc" = después de comer, "hs" = antes de dormir
+- Los nombres pueden estar abreviados o en DCI (nombre genérico): "Amlo" = Amlodipino, "Losart" = Losartán, "Metf" = Metformina, "Atorv" = Atorvastatina
+- La dosis puede estar escrita como fracción: "1/2 comp" = medio comprimido
+- Si la letra es ilegible en algún campo, escribe tu mejor interpretación entre paréntesis: "(posiblemente Enalapril)"
+- Busca el número de unidades: "1-0-1" significa mañana y noche, "1-1-1" significa mañana, mediodía y noche, "0-0-1" significa solo en la noche
+
+REGLAS DE PRIVACIDAD — MUY IMPORTANTE:
+- NO extraigas nombre del paciente, RUT, dirección, edad ni datos del médico
+- SOLO extrae medicamentos, dosis e instrucciones de toma
+
+INTERPRETACIÓN DE HORARIOS:
+- "cada noche" / "hs" / "0-0-1" / "en la noche" → ["noche"]
+- "en la mañana" / "1-0-0" / "en ayunas" / "ac desayuno" → ["mañana"]
+- "1-0-1" / "cada 12h" / "c/12h" / "dos veces al día" → ["mañana","noche"]
+- "1-1-1" / "cada 8h" / "c/8h" / "tres veces al día" → ["mañana","mediodia","noche"]
+- "con almuerzo" / "0-1-0" / "pc almuerzo" → ["mediodia"]
+- "una vez al día" / "c/24h" sin horario especificado → ["mañana"]
+
+Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin backticks, sin comentarios:
 {
+  "tipo": "receta_digital" o "receta_snre" o "receta_manuscrita" o "boleta",
   "medicamentos": [
     {
-      "nombre": "nombre del medicamento",
-      "dosis": "concentración, ej: 5 mg o 320/25",
-      "posologia": "instrucción tal como aparece",
+      "nombre": "nombre del medicamento (mejor interpretación si es manuscrito)",
+      "dosis": "concentración y forma, ej: 5 mg comprimido",
+      "posologia": "instrucción completa tal como aparece, o interpretada si es manuscrita",
       "momento": ["mañana"]
     }
   ],
-  "permanente": true
-}
-
-Para "momento": "cada noche" → ["noche"], "una por día" → ["mañana"],
-"cada 12 horas" → ["mañana","noche"], "cada 8 horas" → ["mañana","mediodia","noche"].
-Si dice "permanente" o "crónico", pon permanente: true.`
+  "permanente": false,
+  "codigo_receta": "código de 20 caracteres si es receta SNRE, o null",
+  "advertencia": "si algo fue difícil de leer o es una interpretación, explícalo brevemente aquí, si no hay nada que advertir pon null"
+}`
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -53,7 +73,7 @@ Si dice "permanente" o "crónico", pon permanente: true.`
           }],
           generationConfig: {
             temperature: 0,
-            maxOutputTokens: 1500,
+            maxOutputTokens: 2000,
           }
         })
       }
@@ -70,10 +90,13 @@ Si dice "permanente" o "crónico", pon permanente: true.`
 
     try {
       const resultado = JSON.parse(texto.replace(/```json|```/g, '').trim())
+      if (!resultado.medicamentos?.length) {
+        return NextResponse.json({ ok: false, error: 'No se detectaron medicamentos. Intenta con mejor iluminación o ingresa los datos manualmente.' })
+      }
       return NextResponse.json({ ok: true, datos: resultado })
     } catch {
       console.error('Error parseando JSON de Gemini:', texto)
-      return NextResponse.json({ ok: false, error: 'No se pudo leer la receta. Agrega los remedios manualmente.' })
+      return NextResponse.json({ ok: false, error: 'No se pudo leer el documento. Intenta con mejor iluminación o ingresa los datos manualmente.' })
     }
   } catch (error) {
     console.error('Error OCR receta:', error)
