@@ -1,5 +1,5 @@
-// app/api/ocr-receta/route.ts — versión 6
-// Prompt optimizado para recetas chilenas: privadas, SNRE, boletas y manuscritas
+// app/api/ocr-receta/route.ts — versión 7
+// Soporta imágenes Y PDFs con Gemini 2.5 Flash
 
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -11,9 +11,27 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: 'Falta GEMINI_API_KEY' }, { status: 500 })
 
+    const esPDF = mediaType === 'application/pdf'
+
+    // Gemini usa inline_data para imágenes y file_data structure para PDFs
+    // Para PDFs usamos el mismo inline_data pero con mime_type correcto
+    const archivoPart = esPDF
+      ? {
+          inline_data: {
+            mime_type: 'application/pdf',
+            data: imagenBase64,
+          }
+        }
+      : {
+          inline_data: {
+            mime_type: mediaType ?? 'image/jpeg',
+            data: imagenBase64,
+          }
+        }
+
     const prompt = `Eres un experto farmacéutico chileno con 20 años de experiencia leyendo recetas médicas de todo tipo.
 
-Analiza esta imagen. Puede ser:
+Analiza este documento. Puede ser:
 1. RECETA PRIVADA digital (clínica, consulta particular) — letra de computador, bien estructurada
 2. RECETA ELECTRÓNICA SNRE de MINSAL — formato digital oficial, tiene código de 20 caracteres
 3. RECETA MANUSCRITA — letra de médico, puede ser difícil de leer, con abreviaturas
@@ -31,27 +49,28 @@ REGLAS DE PRIVACIDAD — MUY IMPORTANTE:
 - SOLO extrae medicamentos, dosis e instrucciones de toma
 
 INTERPRETACIÓN DE HORARIOS:
-- "cada noche" / "hs" / "0-0-1" / "en la noche" → ["noche"]
+- "cada noche" / "hs" / "0-0-1" / "en la noche" / "tarde" → ["noche"]
 - "en la mañana" / "1-0-0" / "en ayunas" / "ac desayuno" → ["mañana"]
 - "1-0-1" / "cada 12h" / "c/12h" / "dos veces al día" → ["mañana","noche"]
 - "1-1-1" / "cada 8h" / "c/8h" / "tres veces al día" → ["mañana","mediodia","noche"]
-- "con almuerzo" / "0-1-0" / "pc almuerzo" → ["mediodia"]
+- "con almuerzo" / "0-1-0" / "pc almuerzo" / "tarde" → ["mediodia"]
 - "una vez al día" / "c/24h" sin horario especificado → ["mañana"]
+- "SOS" o "en caso de dolor/crisis" → ["mañana"] con posologia que indique SOS
 
 Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin backticks, sin comentarios:
 {
-  "tipo": "receta_digital" o "receta_snre" o "receta_manuscrita" o "boleta",
+  "tipo": "receta_digital",
   "medicamentos": [
     {
-      "nombre": "nombre del medicamento (mejor interpretación si es manuscrito)",
-      "dosis": "concentración y forma, ej: 5 mg comprimido",
-      "posologia": "instrucción completa tal como aparece, o interpretada si es manuscrita",
+      "nombre": "nombre del medicamento",
+      "dosis": "concentración y forma, ej: 50 mg comprimido",
+      "posologia": "instrucción completa tal como aparece",
       "momento": ["mañana"]
     }
   ],
-  "permanente": false,
-  "codigo_receta": "código de 20 caracteres si es receta SNRE, o null",
-  "advertencia": "si algo fue difícil de leer o es una interpretación, explícalo brevemente aquí, si no hay nada que advertir pon null"
+  "permanente": true,
+  "codigo_receta": null,
+  "advertencia": null
 }`
 
     const response = await fetch(
@@ -61,19 +80,11 @@ Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin backticks, sin c
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{
-            parts: [
-              {
-                inline_data: {
-                  mime_type: mediaType ?? 'image/jpeg',
-                  data: imagenBase64,
-                }
-              },
-              { text: prompt }
-            ]
+            parts: [archivoPart, { text: prompt }]
           }],
           generationConfig: {
             temperature: 0,
-            maxOutputTokens: 2000,
+            maxOutputTokens: 3000,
           }
         })
       }
