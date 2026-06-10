@@ -135,12 +135,17 @@ export default function HistorialPage() {
           <button onClick={() => setTab('referencia')}
             className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors"
             style={tab === 'referencia' ? { background: '#0B5966', color: '#fff' } : { color: '#6B7280' }}>
-            📊 Precios vigentes
+            📊 Precios
           </button>
           <button onClick={() => setTab('compras')}
             className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors"
             style={tab === 'compras' ? { background: '#0B5966', color: '#fff' } : { color: '#6B7280' }}>
-            🧾 Mis compras
+            🧾 Compras
+          </button>
+          <button onClick={() => router.push('/analisis')}
+            className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+            style={{ color: '#6B7280' }}>
+            📈 Análisis
           </button>
         </div>
 

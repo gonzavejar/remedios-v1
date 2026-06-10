@@ -491,11 +491,6 @@ export default function Home() {
                 <span className="text-xl">🧾</span>
                 <span className="text-xs text-gray-500">Historial</span>
               </button>
-              <button onClick={() => router.push('/analisis')}
-                className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl hover:bg-gray-100 transition-colors">
-                <span className="text-xl">📈</span>
-                <span className="text-xs text-gray-500">Análisis</span>
-              </button>
               <button onClick={() => router.push('/perfil')}
                 className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl hover:bg-gray-100 transition-colors">
                 <span className="text-xl">🎫</span>
