@@ -215,77 +215,8 @@ export default function Home() {
         <h1 className="text-3xl font-bold leading-snug">¿Cuánto debería<br/>costar tu remedio?</h1>
         <p className="text-sm mt-2" style={{ color: '#A8D8CE' }}>Beneficios reales · Fuentes oficiales</p>
 
-        {/* Accesos rápidos cuando está autenticado */}
-        {/* Accesos rápidos — siempre visibles */}
-        {!cargandoAuth && (
-          <div className="mt-5 space-y-2">
-            {/* Fila 1: siempre disponible */}
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => router.push('/farmacias')}
-                className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
-                style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                🗺 <span>Farmacias</span>
-              </button>
-              {usuario ? (
-                <button onClick={() => router.push('/plan')}
-                  className="py-3 rounded-xl text-sm font-semibold flex flex-col items-center gap-1"
-                  style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                  💊 <span>Mi Canasta</span>
-                </button>
-              ) : (
-                <button onClick={() => router.push('/auth')}
-                  className="py-3 rounded-xl text-sm font-bold"
-                  style={{ background: 'rgba(255,255,255,0.25)', color: '#FFFFFF' }}>
-                  Ingresar →
-                </button>
-              )}
-            </div>
-
-            {/* Fila 2: solo autenticado */}
-            {usuario && (
-              <div className="grid grid-cols-5 gap-2">
-                <button onClick={() => router.push('/receta')}
-                  className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
-                  style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                  📄 <span>Mi Receta</span>
-                </button>
-                <button onClick={() => router.push('/registrar')}
-                  className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
-                  style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                  📷 <span>Mi Compra</span>
-                </button>
-                <button onClick={() => router.push('/historial')}
-                  className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
-                  style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                  🧾 <span>Historial</span>
-                </button>
-                <button onClick={() => router.push('/analisis')}
-                  className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
-                  style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                  📈 <span>Análisis</span>
-                </button>
-                <button onClick={() => router.push('/perfil')}
-                  className="py-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1"
-                  style={{ background: 'rgba(255,255,255,0.18)', color: '#FFFFFF' }}>
-                  🎫 <span>Perfil</span>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="max-w-lg mx-auto px-4 pb-16">
-
-        {/* Confirmación registro */}
-        {registradoOk && (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-4 -mt-2 flex items-center gap-2">
-            <span className="text-emerald-600 text-sm">✓ Precio registrado correctamente</span>
-          </div>
-        )}
-
-        {/* Buscador */}
-        <div className="relative -mt-5 mb-5" ref={dropRef}>
+        {/* Buscador dentro del header */}
+        <div className="mt-5 relative" ref={dropRef}>
           <div className="bg-white rounded-2xl shadow-lg flex items-center gap-3 px-4 py-3.5">
             <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -316,6 +247,17 @@ export default function Home() {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="max-w-lg mx-auto px-4 pb-28 pt-4">
+
+        {/* Confirmación registro */}
+        {registradoOk && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-4 -mt-2 flex items-center gap-2">
+            <span className="text-emerald-600 text-sm">✓ Precio registrado correctamente</span>
+          </div>
+        )}
+
 
         {cargando && (
           <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
@@ -526,6 +468,63 @@ export default function Home() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* ── Barra de navegación inferior ── */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-gray-200"
+        style={{ background: 'white', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="max-w-lg mx-auto flex items-center justify-around px-2 py-2">
+          <button onClick={() => router.push('/farmacias')}
+            className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl hover:bg-gray-100 transition-colors">
+            <span className="text-xl">🗺</span>
+            <span className="text-xs text-gray-500">Farmacias</span>
+          </button>
+          {usuario ? (
+            <>
+              <button onClick={() => router.push('/plan')}
+                className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl hover:bg-gray-100 transition-colors">
+                <span className="text-xl">💊</span>
+                <span className="text-xs text-gray-500">Mi Canasta</span>
+              </button>
+              <button onClick={() => router.push('/historial')}
+                className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl hover:bg-gray-100 transition-colors">
+                <span className="text-xl">🧾</span>
+                <span className="text-xs text-gray-500">Historial</span>
+              </button>
+              <button onClick={() => router.push('/analisis')}
+                className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl hover:bg-gray-100 transition-colors">
+                <span className="text-xl">📈</span>
+                <span className="text-xs text-gray-500">Análisis</span>
+              </button>
+              <button onClick={() => router.push('/perfil')}
+                className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl hover:bg-gray-100 transition-colors">
+                <span className="text-xl">🎫</span>
+                <span className="text-xs text-gray-500">Perfil</span>
+              </button>
+            </>
+          ) : (
+            <button onClick={() => router.push('/auth')}
+              className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl hover:bg-gray-100 transition-colors">
+              <span className="text-xl">👤</span>
+              <span className="text-xs text-gray-500">Ingresar</span>
+            </button>
+          )}
+          {/* Botón compartir */}
+          <button onClick={() => {
+            const url = 'https://turemedio.vercel.app'
+            const texto = '¿Cuánto debería costar tu remedio? Compara precios en farmacias chilenas 💊'
+            if (navigator.share) {
+              navigator.share({ title: '¿Cuánto debería costar tu remedio?', text: texto, url })
+            } else {
+              const whatsapp = `https://wa.me/?text=${encodeURIComponent(texto + ' ' + url)}`
+              window.open(whatsapp, '_blank')
+            }
+          }}
+            className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl hover:bg-gray-100 transition-colors">
+            <span className="text-xl">📤</span>
+            <span className="text-xs text-gray-500">Compartir</span>
+          </button>
+        </div>
       </div>
     </main>
   )
