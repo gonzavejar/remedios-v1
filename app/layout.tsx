@@ -47,7 +47,6 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
-        {/* PWA meta tags para iOS */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Mis Remedios" />
@@ -56,6 +55,40 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         {children}
         <Analytics />
+
+        {/* Botón compartir — fijo arriba a la derecha, visible en todas las páginas */}
+        <button
+          id="btn-compartir"
+          title="Compartir app"
+          style={{
+            position: 'fixed',
+            top: '12px',
+            right: '12px',
+            zIndex: 9999,
+            background: 'rgba(255,255,255,0.15)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,255,255,0.25)',
+            borderRadius: '50%',
+            width: '36px',
+            height: '36px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '16px',
+          }}
+          onclick="
+            var url = 'https://turemedio.vercel.app';
+            var texto = '💊 ¿Cuánto debería costar tu remedio? Compara precios en farmacias chilenas: ';
+            if (navigator.share) {
+              navigator.share({ title: '¿Cuánto debería costar tu remedio?', text: texto, url: url });
+            } else {
+              window.open('https://wa.me/?text=' + encodeURIComponent(texto + url), '_blank');
+            }
+          "
+        >
+          📤
+        </button>
 
         {/* Registro del Service Worker */}
         <script dangerouslySetInnerHTML={{

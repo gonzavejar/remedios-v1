@@ -504,21 +504,7 @@ export default function Home() {
               <span className="text-xs text-gray-500">Ingresar</span>
             </button>
           )}
-          {/* Botón compartir */}
-          <button onClick={() => {
-            const url = 'https://turemedio.vercel.app'
-            const texto = '¿Cuánto debería costar tu remedio? Compara precios en farmacias chilenas 💊'
-            if (navigator.share) {
-              navigator.share({ title: '¿Cuánto debería costar tu remedio?', text: texto, url })
-            } else {
-              const whatsapp = `https://wa.me/?text=${encodeURIComponent(texto + ' ' + url)}`
-              window.open(whatsapp, '_blank')
-            }
-          }}
-            className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl hover:bg-gray-100 transition-colors">
-            <span className="text-xl">📤</span>
-            <span className="text-xs text-gray-500">Compartir</span>
-          </button>
+
         </div>
       </div>
     </main>
