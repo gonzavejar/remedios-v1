@@ -1,4 +1,4 @@
-// app/api/ocr-receta/route.ts — versión 2
+// app/api/ocr-receta/route.ts — versión 3
 // Acepta imágenes Y PDFs. Solo extrae medicamentos y posología, nunca datos personales.
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -16,7 +16,11 @@ export async function POST(request: NextRequest) {
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY!,
+        'anthropic-version': '2023-06-01',
+      },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1500,
@@ -54,7 +58,12 @@ Si dice "permanente" o "crónico", pon permanente: true.`
       })
     })
 
-    if (!response.ok) throw new Error(`Error Claude API: ${response.status}`)
+    if (!response.ok) {
+      const errBody = await response.text()
+      console.error('Error Claude API:', response.status, errBody)
+      throw new Error(`Error Claude API: ${response.status}`)
+    }
+
     const data = await response.json()
     const texto = data.content?.[0]?.text ?? ''
 
