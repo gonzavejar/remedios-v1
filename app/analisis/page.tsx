@@ -412,103 +412,74 @@ export default function AnalisisPage() {
               </div>
             )}
 
-            {/* ── Detalle por remedio ── */}
+            {/* ── Tabla por remedio ── */}
             {vista === 'detalle' && (
-              <div className="space-y-3">
-                {medicinas.map(m => {
-                  const ahorro = (m.ultimo_precio_usuario ?? m.precio_lista ?? 0) - (m.precio_cenabast ?? 0)
-                  const pctAhorro = m.precio_cenabast && (m.ultimo_precio_usuario ?? m.precio_lista)
-                    ? Math.round((ahorro / (m.ultimo_precio_usuario ?? m.precio_lista ?? 1)) * 100)
-                    : 0
-
-                  return (
-                    <div key={m.producto_id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
-                      <div className="px-5 py-4">
-                        <p className="text-base font-bold" style={{ color: '#1A2E2E' }}>{m.nombre}</p>
-                        <p className="text-sm text-gray-500">{m.dosis_forma}</p>
-
-                        <div className="flex gap-4 mt-3">
-                          {m.ultimo_precio_usuario && (
-                            <div>
-                              <p className="text-xs text-gray-400">Último registrado</p>
-                              <p className="text-lg font-bold text-gray-800">
-                                {clp(m.ultimo_precio_usuario)}
-                              </p>
-                              {m.ultima_fecha && (
-                                <p className="text-xs text-gray-400">{m.ultima_fecha.slice(0,7)}</p>
-                              )}
-                            </div>
-                          )}
-                          {!m.ultimo_precio_usuario && m.precio_lista && (
-                            <div>
-                              <p className="text-xs text-gray-400">Precio lista</p>
-                              <p className="text-lg font-bold text-gray-800">{clp(m.precio_lista)}</p>
-                            </div>
-                          )}
-                          {m.precio_cenabast && (
-                            <div>
-                              <p className="text-xs text-gray-400">CENABAST</p>
-                              <p className="text-lg font-bold" style={{ color: '#0B5966' }}>
-                                {clp(m.precio_cenabast)}
-                              </p>
-                            </div>
-                          )}
-                          {ahorro > 0 && pctAhorro > 0 && (
-                            <div className="ml-auto text-right">
-                              <p className="text-xs text-gray-400">Ahorro</p>
-                              <p className="text-lg font-bold" style={{ color: '#1D9E75' }}>
-                                {clp(ahorro)}
-                              </p>
-                              <p className="text-xs" style={{ color: '#1D9E75' }}>-{pctAhorro}%</p>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Mini gráfico de historial si hay más de 1 punto */}
-                        {m.historial.length > 1 && (
-                          <div className="mt-3">
-                            <ResponsiveContainer width="100%" height={60}>
-                              <LineChart data={m.historial.map(h => ({
-                                mes: mesLabel(h.mes), valor: h.valor
-                              }))}>
-                                <Line
-                                  type="monotone" dataKey="valor"
-                                  stroke="#EF4444" strokeWidth={2}
-                                  dot={{ r: 3, fill: '#EF4444' }}
-                                />
-                                {m.precio_cenabast && (
-                                  <ReferenceLine y={m.precio_cenabast} stroke="#0B5966"
-                                    strokeDasharray="4 2" strokeWidth={1.5}/>
-                                )}
-                              </LineChart>
-                            </ResponsiveContainer>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-
-                {/* Total canasta */}
-                <div className="bg-white rounded-2xl p-5 shadow-sm border-2"
-                  style={{ borderColor: '#0B5966' }}>
-                  <div className="flex justify-between items-center mb-2">
-                    <p className="text-base font-bold text-gray-800">Total canasta</p>
-                    <p className="text-xl font-bold" style={{ color: '#1A2E2E' }}>{clp(totalActual)}</p>
-                  </div>
-                  {hayDatosCenabast && (
-                    <div className="flex justify-between items-center mb-2">
-                      <p className="text-sm text-gray-500">Con CENABAST</p>
-                      <p className="text-base font-bold" style={{ color: '#0B5966' }}>{clp(totalCenabast)}</p>
-                    </div>
-                  )}
-                  {hayDatosCenabast && ahorroMensual > 0 && (
-                    <div className="flex justify-between items-center pt-2 border-t border-gray-100">
-                      <p className="text-sm font-medium" style={{ color: '#1D9E75' }}>Ahorro potencial mensual</p>
-                      <p className="text-base font-bold" style={{ color: '#1D9E75' }}>{clp(ahorroMensual)}</p>
-                    </div>
-                  )}
-                </div>
+              <div className="bg-white rounded-2xl shadow-sm overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ background: '#F0F7F8' }}>
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600 min-w-[140px]">Remedio</th>
+                      <th className="text-right px-3 py-3 font-semibold whitespace-nowrap" style={{ color: '#0B5966' }}>CENABAST</th>
+                      <th className="text-right px-3 py-3 font-semibold text-gray-500 whitespace-nowrap">Lista</th>
+                      <th className="text-right px-3 py-3 font-semibold text-gray-700 whitespace-nowrap">Último<br/>pagado</th>
+                      <th className="text-right px-4 py-3 font-semibold whitespace-nowrap" style={{ color: '#1D9E75' }}>Ahorro<br/>potencial</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {medicinas.map((m, i) => {
+                      const precioActual = m.ultimo_precio_usuario ?? m.precio_lista ?? 0
+                      const ahorro = m.precio_cenabast ? precioActual - m.precio_cenabast : null
+                      const pct = ahorro && precioActual ? Math.round((ahorro / precioActual) * 100) : null
+                      return (
+                        <tr key={m.producto_id}
+                          className={`${i > 0 ? 'border-t border-gray-100' : ''} hover:bg-gray-50 transition-colors`}>
+                          <td className="px-4 py-3">
+                            <span className="font-semibold text-gray-800 block">{m.nombre}</span>
+                            {m.dosis_forma && <span className="text-xs text-gray-400">{m.dosis_forma}</span>}
+                          </td>
+                          <td className="px-3 py-3 text-right font-semibold" style={{ color: '#0B5966' }}>
+                            {m.precio_cenabast ? clp(m.precio_cenabast) : '—'}
+                          </td>
+                          <td className="px-3 py-3 text-right text-gray-500">
+                            {m.precio_lista ? clp(m.precio_lista) : '—'}
+                          </td>
+                          <td className="px-3 py-3 text-right text-gray-800 font-medium">
+                            {m.ultimo_precio_usuario ? (
+                              <>
+                                <span className="block">{clp(m.ultimo_precio_usuario)}</span>
+                                {m.ultima_fecha && <span className="text-xs text-gray-400">{m.ultima_fecha.slice(0,7)}</span>}
+                              </>
+                            ) : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {ahorro && ahorro > 0 ? (
+                              <>
+                                <span className="font-bold block" style={{ color: '#1D9E75' }}>{clp(ahorro)}</span>
+                                {pct && <span className="text-xs" style={{ color: '#1D9E75' }}>-{pct}%</span>}
+                              </>
+                            ) : <span className="text-gray-300">—</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {/* Fila total */}
+                    <tr className="border-t-2 border-gray-200" style={{ background: '#F0F7F8' }}>
+                      <td className="px-4 py-3 font-bold text-gray-800">Total canasta</td>
+                      <td className="px-3 py-3 text-right font-bold" style={{ color: '#0B5966' }}>
+                        {hayDatosCenabast ? clp(totalCenabast) : '—'}
+                      </td>
+                      <td className="px-3 py-3 text-right font-bold text-gray-500">
+                        {totalLista > 0 ? clp(totalLista) : '—'}
+                      </td>
+                      <td className="px-3 py-3 text-right font-bold text-gray-800">
+                        {clp(totalActual)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold" style={{ color: '#1D9E75' }}>
+                        {hayDatosCenabast && ahorroMensual > 0 ? clp(ahorroMensual) : '—'}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             )}
           </>
