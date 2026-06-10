@@ -57,38 +57,26 @@ export default function RootLayout({
         <Analytics />
 
         {/* Botón compartir — fijo arriba a la derecha, visible en todas las páginas */}
-        <button
-          id="btn-compartir"
-          title="Compartir app"
-          style={{
-            position: 'fixed',
-            top: '12px',
-            right: '12px',
-            zIndex: 9999,
-            background: 'rgba(255,255,255,0.15)',
-            backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(255,255,255,0.25)',
-            borderRadius: '50%',
-            width: '36px',
-            height: '36px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontSize: '16px',
-          }}
-          onclick="
-            var url = 'https://turemedio.vercel.app';
-            var texto = '💊 ¿Cuánto debería costar tu remedio? Compara precios en farmacias chilenas: ';
-            if (navigator.share) {
-              navigator.share({ title: '¿Cuánto debería costar tu remedio?', text: texto, url: url });
-            } else {
-              window.open('https://wa.me/?text=' + encodeURIComponent(texto + url), '_blank');
-            }
-          "
-        >
-          📤
-        </button>
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function() {
+            var btn = document.createElement('button');
+            btn.title = 'Compartir app';
+            btn.innerHTML = '📤';
+            btn.style.cssText = 'position:fixed;top:12px;right:12px;z-index:9999;background:rgba(255,255,255,0.15);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.25);border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;line-height:1;';
+            btn.addEventListener('click', function() {
+              var url = 'https://turemedio.vercel.app';
+              var texto = '💊 ¿Cuánto debería costar tu remedio? Compara precios en farmacias chilenas: ';
+              if (navigator.share) {
+                navigator.share({ title: '¿Cuánto debería costar tu remedio?', text: texto, url: url });
+              } else {
+                window.open('https://wa.me/?text=' + encodeURIComponent(texto + url), '_blank');
+              }
+            });
+            document.addEventListener('DOMContentLoaded', function() {
+              document.body.appendChild(btn);
+            });
+          })();
+        `}} />
 
         {/* Registro del Service Worker */}
         <script dangerouslySetInnerHTML={{
