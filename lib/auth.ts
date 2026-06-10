@@ -55,7 +55,7 @@ export async function iniciarSesionGoogle() {
   const origin = typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL
   return supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: `${origin}/` },
+    options: { redirectTo: `${origin}/auth/callback` },
   })
 }
 
