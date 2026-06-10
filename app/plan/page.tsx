@@ -349,57 +349,75 @@ export default function PlanPage() {
           </div>
         )}
 
-        {/* Plan por momentos */}
-        {!cargando && MOMENTOS.map(mom => {
-          const lista = remediosPorMomento(mom.value)
-          if (lista.length === 0) return null
-          return (
-            <div key={mom.value} className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-5 py-4 flex items-center gap-3" style={{ background: 'rgba(11,89,102,0.06)' }}>
-                <span className="text-3xl">{mom.emoji}</span>
-                <div className="flex-1">
-                  <p className="text-lg font-bold" style={{ color: '#0B5966' }}>{mom.label}</p>
-                </div>
-                {/* Hora por defecto del momento */}
-                <p className="text-base font-bold" style={{ color: '#0B5966' }}>
-                  {lista[0] ? (horaRemedio(lista[0], mom.value) ?? mom.default) : mom.default}
-                </p>
-              </div>
-              <div className="divide-y divide-gray-100">
-                {lista.map(r => (
-                  <div key={r.id} className="px-5 py-4">
-                    <div className="flex items-start gap-3">
-                      <div className="w-3 h-3 rounded-full mt-2 flex-shrink-0" style={{ background: '#1D9E75' }}/>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-lg font-semibold" style={{ color: '#1A2E2E' }}>{nombreRemedio(r)}</p>
-                        <p className="text-base text-gray-600">
-                          {r.dosis_texto && <span>{r.dosis_texto} · </span>}
-                          {r.posologia ?? '1 dosis'}
-                        </p>
-                        <div className="flex gap-3 mt-1 flex-wrap">
-                          <span className="text-sm text-gray-500">{descDias(r)}</span>
-                          <span className="text-sm font-medium"
-                            style={{ color: r.permanente || !r.duracion_dias ? '#0B5966' : '#EF9F27' }}>
-                            {descDuracion(r)}
-                          </span>
-                          {horaRemedio(r, mom.value) && (
-                            <span className="text-sm font-bold text-gray-700">
-                              🕐 {horaRemedio(r, mom.value)}
+        {/* Plan en tabla */}
+        {!cargando && remedios.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ background: '#F0F7F8' }}>
+                  <th className="text-left px-4 py-3 font-semibold text-gray-600 min-w-[140px]">Remedio</th>
+                  <th className="text-left px-3 py-3 font-semibold text-gray-600">Dosis</th>
+                  <th className="text-left px-3 py-3 font-semibold text-gray-600">Horario</th>
+                  <th className="text-left px-3 py-3 font-semibold text-gray-600">Días</th>
+                  <th className="text-left px-3 py-3 font-semibold text-gray-600">Duración</th>
+                  <th className="px-3 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {remedios.map((r, i) => (
+                  <tr key={r.id}
+                    className={`${i > 0 ? 'border-t border-gray-100' : ''} hover:bg-gray-50 transition-colors`}>
+                    <td className="px-4 py-3">
+                      <span className="font-semibold text-gray-800 block">{nombreRemedio(r)}</span>
+                      {r.producto?.dosis_forma && (
+                        <span className="text-xs text-gray-400">{r.producto.dosis_forma}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-gray-600">
+                      {r.dosis_texto || '—'}
+                      {r.posologia && <span className="block text-xs text-gray-400">{r.posologia}</span>}
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-col gap-0.5">
+                        {(r.momento_toma ?? []).map(m => {
+                          const mom = MOMENTOS.find(x => x.value === m)
+                          const hora = horaRemedio(r, m)
+                          return (
+                            <span key={m} className="text-xs flex items-center gap-1">
+                              <span>{mom?.emoji}</span>
+                              <span className="text-gray-700 font-medium">{mom?.label}</span>
+                              {hora && <span className="text-gray-400">{hora}</span>}
                             </span>
-                          )}
-                        </div>
+                          )
+                        })}
                       </div>
-                      <div className="flex gap-1 flex-shrink-0">
-                        <button onClick={() => abrirEditar(r)} className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 text-lg">✏️</button>
-                        <button onClick={() => handleEliminar(r.id)} className="p-2 rounded-lg text-gray-400 hover:bg-red-50 text-lg">🗑</button>
+                    </td>
+                    <td className="px-3 py-3 text-gray-500 text-xs whitespace-nowrap">
+                      {descDias(r)}
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+                        style={{
+                          background: r.permanente || !r.duracion_dias ? 'rgba(11,89,102,0.08)' : 'rgba(239,159,39,0.12)',
+                          color: r.permanente || !r.duracion_dias ? '#0B5966' : '#B45309'
+                        }}>
+                        {descDuracion(r)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex gap-1">
+                        <button onClick={() => abrirEditar(r)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100">✏️</button>
+                        <button onClick={() => handleEliminar(r.id)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50">🗑</button>
                       </div>
-                    </div>
-                  </div>
+                    </td>
+                  </tr>
                 ))}
-              </div>
-            </div>
-          )
-        })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Botones al fondo */}
         {!cargando && remedios.length > 0 && (
