@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { obtenerUsuario, agregarRemedioConPosologia } from '../../lib/auth'
+import { supabase } from '../../lib/supabase'
 import EnviarEmail, { textoPlanToma } from '../../components/EnviarEmail'
 
 interface MedReceta {
@@ -137,9 +138,31 @@ export default function RecetaPage() {
     setPaso('guardando')
     try {
       for (const m of incluidos) {
+        // 1. Buscar en base de datos existente
         const res = await fetch(`/api/buscar?q=${encodeURIComponent(m.nombre)}`)
         const data = await res.json()
-        const productoId = data.resultados?.[0]?.id ?? null
+        let productoId = data.resultados?.[0]?.id ?? null
+
+        // 2. Si no existe, crearlo automáticamente (solo desde recetas escaneadas)
+        if (!productoId && preview) {
+          const nombreLimpio = m.nombre.trim()
+          const { data: nuevo, error: errInsert } = await supabase
+            .from('producto')
+            .insert({
+              nombre_comercial:   nombreLimpio,
+              dosis_forma:        m.dosis || null,
+              registro_isp:       'RECETA-AUTO',
+              tiene_bioequivalente: false,
+              condicion_venta:    'receta',
+            })
+            .select('id')
+            .single()
+
+          if (!errInsert && nuevo) {
+            productoId = nuevo.id
+            console.log(`Producto creado automáticamente: ${nombreLimpio} (id: ${productoId})`)
+          }
+        }
 
         await agregarRemedioConPosologia({
           usuarioId:   usuario.id,
