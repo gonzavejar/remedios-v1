@@ -44,7 +44,7 @@ El precio_unitario debe ser el precio FINAL pagado (después de descuentos si lo
               { text: prompt }
             ]
           }],
-          generationConfig: { temperature: 0, maxOutputTokens: 1500 }
+          generationConfig: { temperature: 0, maxOutputTokens: 2000 }
         })
       }
     )
@@ -59,7 +59,22 @@ El precio_unitario debe ser el precio FINAL pagado (después de descuentos si lo
     const texto = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
 
     try {
-      const resultado = JSON.parse(texto.replace(/```json|```/g, '').trim())
+      let textoLimpio = texto.replace(/```json|```/g, '').trim()
+      // Si el JSON está incompleto, intentar cerrarlo
+      if (!textoLimpio.endsWith('}')) {
+        // Cerrar arrays y objetos abiertos
+        const abiertos = (textoLimpio.match(/\[/g) || []).length - (textoLimpio.match(/\]/g) || []).length
+        const objAbiertos = (textoLimpio.match(/\{/g) || []).length - (textoLimpio.match(/\}/g) || []).length
+        // Añadir campos faltantes si cortó dentro de productos
+        if (!textoLimpio.includes('"descuento_detectado"')) {
+          if (textoLimpio.includes('"productos"')) {
+            for (let i = 0; i < abiertos; i++) textoLimpio += ']'
+            textoLimpio += ', "descuento_detectado": false, "tipo_descuento_detectado": "ninguno"'
+          }
+          for (let i = 0; i < objAbiertos - (abiertos > 0 ? 0 : 0); i++) textoLimpio += '}'
+        }
+      }
+      const resultado = JSON.parse(textoLimpio)
       return NextResponse.json({ ok: true, datos: resultado })
     } catch {
       console.error('Error parseando JSON de Gemini:', texto)
