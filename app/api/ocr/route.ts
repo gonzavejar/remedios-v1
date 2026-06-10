@@ -1,5 +1,5 @@
-// app/api/ocr/route.ts — versión 3
-// Migrado a Google Gemini 2.5 Flash
+// app/api/ocr/route.ts — versión 4
+// Gemini 2.5 Flash — detecta descuentos correctamente
 
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -12,25 +12,29 @@ export async function POST(request: NextRequest) {
     if (!apiKey) return NextResponse.json({ error: 'Falta GEMINI_API_KEY' }, { status: 500 })
 
     const prompt = `Analiza esta boleta de farmacia chilena.
+
+INSTRUCCIONES IMPORTANTES:
+- El precio_unitario debe ser el precio FINAL pagado por producto (después de restar cualquier descuento)
+- Si hay líneas de descuento (DCTO, ALIANZA, CLUB, CONVENIO, etc.) réstalas al precio original
+- Para tipo_descuento_detectado usa: "club" si hay Club farmacia o Alianza banco, "convenio" si hay convenio Fonasa/Isapre/Caja, "ninguno" si no hay descuento
+- Incluye SOLO medicamentos, no otros productos
+
 Responde SOLO con JSON válido, sin texto adicional, sin backticks:
 {
-  "farmacia": "nombre de la cadena o farmacia",
-  "comuna": "comuna si aparece o null",
+  "farmacia": "nombre de la cadena",
+  "comuna": "comuna o null",
   "fecha": "YYYY-MM-DD o null",
   "productos": [
     {
-      "nombre_boleta": "nombre exacto como aparece en la boleta",
-      "nombre_generico": "principio activo probable en español",
-      "precio_unitario": 1234,
+      "nombre_boleta": "nombre exacto como aparece",
+      "nombre_generico": "principio activo en español",
+      "precio_unitario": 17505,
       "cantidad": 1
     }
   ],
-  "descuento_detectado": false,
-  "tipo_descuento_detectado": "club/convenio/ninguno"
-}
-Incluye SOLO medicamentos, no otros productos. Precios en pesos enteros sin puntos ni símbolos.
-Si ves CLUB, CONVENIO, DCTO o DESCUENTO en la boleta, márcalo en tipo_descuento_detectado.
-El precio_unitario debe ser el precio FINAL pagado (después de descuentos si los hay).`
+  "descuento_detectado": true,
+  "tipo_descuento_detectado": "club"
+}`
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -62,16 +66,12 @@ El precio_unitario debe ser el precio FINAL pagado (después de descuentos si lo
       let textoLimpio = texto.replace(/```json|```/g, '').trim()
       // Si el JSON está incompleto, intentar cerrarlo
       if (!textoLimpio.endsWith('}')) {
-        // Cerrar arrays y objetos abiertos
-        const abiertos = (textoLimpio.match(/\[/g) || []).length - (textoLimpio.match(/\]/g) || []).length
-        const objAbiertos = (textoLimpio.match(/\{/g) || []).length - (textoLimpio.match(/\}/g) || []).length
-        // Añadir campos faltantes si cortó dentro de productos
         if (!textoLimpio.includes('"descuento_detectado"')) {
-          if (textoLimpio.includes('"productos"')) {
-            for (let i = 0; i < abiertos; i++) textoLimpio += ']'
-            textoLimpio += ', "descuento_detectado": false, "tipo_descuento_detectado": "ninguno"'
-          }
-          for (let i = 0; i < objAbiertos - (abiertos > 0 ? 0 : 0); i++) textoLimpio += '}'
+          const abiertos = (textoLimpio.match(/\[/g) || []).length - (textoLimpio.match(/\]/g) || []).length
+          for (let i = 0; i < abiertos; i++) textoLimpio += ']'
+          textoLimpio += ', "descuento_detectado": false, "tipo_descuento_detectado": "ninguno"}'
+        } else {
+          textoLimpio += '}'
         }
       }
       const resultado = JSON.parse(textoLimpio)
