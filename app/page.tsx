@@ -470,6 +470,18 @@ export default function Home() {
         )}
       </div>
 
+      {/* ── Pie de página ── */}
+      <div className="max-w-lg mx-auto px-4 pb-32 pt-4 text-center">
+        <button onClick={() => router.push('/instalar')}
+          className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold shadow-sm"
+          style={{ background: 'white', color: '#0B5966', border: '1.5px solid #0B5966' }}>
+          📲 Instalar app en tu celular
+        </button>
+        <p className="text-xs text-gray-400 mt-3">
+          Gratis · Sin App Store · Sin Play Store
+        </p>
+      </div>
+
       {/* ── Barra de navegación inferior ── */}
       <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-gray-200"
         style={{ background: 'white', paddingBottom: 'env(safe-area-inset-bottom)' }}>
