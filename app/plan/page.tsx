@@ -85,6 +85,9 @@ export default function PlanPage() {
   const [exportando, setExportando] = useState(false)
   const [notifOk, setNotifOk]       = useState(false)
   const { puedeInstalar, notifActivas, instalarApp, activarNotificaciones, programarAlarmas } = usePWA()
+  const [modoSeleccion, setModoSeleccion] = useState(false)
+  const [seleccionados, setSeleccionados] = useState<number[]>([])
+  const [confirmBorrarTodo, setConfirmBorrarTodo] = useState(false)
 
   useEffect(() => {
     obtenerUsuario().then(u => {
@@ -204,6 +207,31 @@ export default function PlanPage() {
     if (!confirm('¿Eliminar este remedio del plan?')) return
     await supabase.from('usuario_remedio').update({ activo: false }).eq('id', id)
     setRemedios(prev => prev.filter(r => r.id !== id))
+  }
+
+  async function handleEliminarSeleccionados() {
+    if (seleccionados.length === 0) return
+    if (!confirm(`¿Eliminar ${seleccionados.length} remedio${seleccionados.length > 1 ? 's' : ''} del plan?`)) return
+    await Promise.all(seleccionados.map(id =>
+      supabase.from('usuario_remedio').update({ activo: false }).eq('id', id)
+    ))
+    setRemedios(prev => prev.filter(r => !seleccionados.includes(r.id)))
+    setSeleccionados([])
+    setModoSeleccion(false)
+  }
+
+  async function handleBorrarTodo() {
+    await Promise.all(remedios.map(r =>
+      supabase.from('usuario_remedio').update({ activo: false }).eq('id', r.id)
+    ))
+    setRemedios([])
+    setConfirmBorrarTodo(false)
+  }
+
+  function toggleSeleccion(id: number) {
+    setSeleccionados(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
   }
 
   // ── Exportar a calendario ──────────────────────────────────────────────────
@@ -346,6 +374,58 @@ export default function PlanPage() {
             <p className="text-xs text-gray-400 mt-1 text-center">
               Las alarmas funcionan aunque la app esté cerrada
             </p>
+          </div>
+        )}
+
+        {/* Barra de acciones */}
+        {!cargando && remedios.length > 0 && (
+          <div className="flex gap-2 mb-4 flex-wrap">
+            <button
+              onClick={() => { setModoSeleccion(!modoSeleccion); setSeleccionados([]) }}
+              className="px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-colors"
+              style={modoSeleccion
+                ? { background: '#0B5966', color: 'white', borderColor: '#0B5966' }
+                : { background: 'white', color: '#0B5966', borderColor: '#0B5966' }}>
+              {modoSeleccion ? '✕ Cancelar' : '☑ Seleccionar'}
+            </button>
+            {modoSeleccion && seleccionados.length > 0 && (
+              <button onClick={handleEliminarSeleccionados}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white"
+                style={{ background: '#EF4444' }}>
+                🗑 Eliminar {seleccionados.length} seleccionado{seleccionados.length > 1 ? 's' : ''}
+              </button>
+            )}
+            {!modoSeleccion && (
+              <button onClick={() => setConfirmBorrarTodo(true)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold border-2"
+                style={{ background: 'white', color: '#EF4444', borderColor: '#EF4444' }}>
+                🗑 Borrar plan completo
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Modal confirmar borrar todo */}
+        {confirmBorrarTodo && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.5)' }}>
+            <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+              <p className="text-lg font-bold text-gray-800 mb-2">¿Borrar plan completo?</p>
+              <p className="text-sm text-gray-500 mb-5">
+                Se eliminarán los {remedios.length} remedios de tu plan. Esta acción no se puede deshacer.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmBorrarTodo(false)}
+                  className="flex-1 py-3 rounded-xl text-sm font-semibold border-2 border-gray-200 text-gray-600">
+                  Cancelar
+                </button>
+                <button onClick={handleBorrarTodo}
+                  className="flex-1 py-3 rounded-xl text-sm font-semibold text-white"
+                  style={{ background: '#EF4444' }}>
+                  Sí, borrar todo
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
