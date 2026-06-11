@@ -138,39 +138,54 @@ export default function RecetaPage() {
     setPaso('guardando')
     try {
       for (const m of incluidos) {
-        // 1. Buscar en base de datos existente
-        const res = await fetch(`/api/buscar?q=${encodeURIComponent(m.nombre)}`)
+        // 1. Buscar por nombre + dosis para mayor precisión
+        const queryBusqueda = m.dosis
+          ? `${m.nombre} ${m.dosis}`.trim()
+          : m.nombre.trim()
+        const res = await fetch(`/api/buscar?q=${encodeURIComponent(queryBusqueda)}`)
         const data = await res.json()
-        let productoId = data.resultados?.[0]?.id ?? null
 
-        // 2. Si no existe, crearlo automáticamente (solo desde recetas escaneadas)
+        // 2. Verificar que el resultado tenga dosis compatible
+        let productoId: number | null = null
+        if (data.resultados?.length > 0) {
+          const dosisNum = m.dosis?.match(/\d+/)?.[0]
+          const match = dosisNum
+            ? data.resultados.find((r: any) =>
+                r.dosis_forma?.includes(dosisNum) ||
+                r.nombre_comercial?.includes(dosisNum)
+              ) ?? null
+            : data.resultados[0]
+          productoId = match?.id ?? null
+        }
+
+        // 3. Si no hay coincidencia exacta, crear producto nuevo (solo desde recetas escaneadas)
         if (!productoId && preview) {
           const nombreLimpio = m.nombre.trim()
           const { data: nuevo, error: errInsert } = await supabase
             .from('producto')
             .insert({
-              nombre_comercial:   nombreLimpio,
-              dosis_forma:        m.dosis || null,
-              registro_isp:       'RECETA-AUTO',
+              nombre_comercial:     nombreLimpio,
+              dosis_forma:          m.dosis || null,
+              registro_isp:         'RECETA-AUTO',
               tiene_bioequivalente: false,
-              condicion_venta:    'receta',
+              condicion_venta:      'receta',
             })
             .select('id')
             .single()
 
           if (!errInsert && nuevo) {
             productoId = nuevo.id
-            console.log(`Producto creado automáticamente: ${nombreLimpio} (id: ${productoId})`)
+            console.log(`Producto creado: ${nombreLimpio} ${m.dosis} (id: ${productoId})`)
           }
         }
 
         await agregarRemedioConPosologia({
-          usuarioId:   usuario.id,
+          usuarioId:    usuario.id,
           productoId,
           nombreManual: m.nombre,
-          dosisTexto:  m.dosis,
-          posologia:   m.posologia,
-          momentoToma: m.momento,
+          dosisTexto:   m.dosis,
+          posologia:    m.posologia,
+          momentoToma:  m.momento,
           permanente,
         })
       }
